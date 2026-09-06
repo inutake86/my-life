@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>MY LIFE 蔵書録 PWA試作 v0.31</title>
+<title>MY LIFE 蔵書録 PWA試作 v0.32</title>
 <style>
 :root{
   --bg:#f3f4f6;--panel:#fff;--line:#d7dbe0;--text:#1f2937;--muted:#6b7280;
@@ -366,6 +366,115 @@ body.detail-open .app{
   .detail-rating-value{font-size:19px}
 }
 
+
+/* v0.32: compact detail + separate quick-review window */
+.detail{
+  max-height:58vh;
+}
+.detail-ratings{
+  margin-top:8px;
+}
+.detail-rating-card{
+  padding:7px 9px;
+}
+.detail-rating-value{
+  font-size:19px;
+}
+
+/* The review UI is no longer inside the normal detail window. */
+.review-overlay{
+  position:fixed;
+  inset:0;
+  z-index:1200;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  background:rgba(0,0,0,.34);
+}
+.review-overlay.show{
+  display:flex;
+}
+.review-window{
+  width:min(94vw,480px);
+  max-height:84vh;
+  overflow-y:auto;
+  border-radius:16px;
+  background:#fff;
+  border:1px solid var(--line);
+  box-shadow:0 14px 40px rgba(0,0,0,.22);
+  padding:14px;
+}
+.review-window-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:6px;
+}
+.review-window-title{
+  font-size:17px;
+  font-weight:900;
+}
+.review-work-title{
+  margin-top:3px;
+  font-size:12px;
+  line-height:1.35;
+  color:var(--muted);
+  max-width:72vw;
+}
+.review-window-actions{
+  display:flex;
+  justify-content:flex-end;
+  margin-top:10px;
+}
+.review-window-actions .secondary{
+  min-width:110px;
+}
+
+.quick-star-area{
+  min-height:62px;
+  margin:1px 0 8px;
+}
+.quick-star-toggle{
+  width:auto;
+  min-width:96px;
+  height:54px;
+  padding:0 18px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+  font-size:21px;
+  line-height:1;
+  font-weight:800;
+  letter-spacing:.02em;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  touch-action:manipulation;
+}
+.quick-star-toggle.is-starred{
+  border-color:var(--accent);
+  background:#fff;
+}
+.quick-star-toggle.is-starred #quickStarGlyph{
+  font-weight:1000;
+  font-size:23px;
+}
+.quick-score-btn{
+  min-height:44px;
+}
+@media (max-width:390px){
+  .review-window{
+    width:96vw;
+    padding:12px;
+  }
+  .quick-star-toggle{
+    min-width:102px;
+    height:56px;
+  }
+}
+
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
@@ -375,7 +484,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.31</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.32</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -454,27 +563,43 @@ body.detail-open .app{
     <div class="cover-note">表紙をタップで拡大</div>
   </div>
 
-  <div class="quick-rating">
-    <div class="quick-rating-head">
-      <strong>簡易評価</strong>
-      <span id="quickRatingStatus">アプリに保存</span>
-    </div>
-
-    <div class="quick-star-area">
-      <button id="quickStarToggle" class="quick-star-toggle" type="button" aria-label="簡易評価の星を切り替える">
-        <span id="quickStarGlyph">☆</span>
-      </button>
-    </div>
-
-    <div id="quickRatingRows" class="quick-rating-rows"></div>
-
-    <button id="quickRatingReset" class="quick-rating-reset hidden" type="button">Excel取込時の評価に戻す</button>
-  </div>
-
   <div class="detail-actions detail-actions-three">
     <a id="productBtn" class="action-link product-action" href="#" target="_blank" rel="noopener">商品ページ</a>
     <button id="reviewBtn" class="primary">レビューする</button>
     <button id="closeBtn2" class="secondary">閉じる</button>
+  </div>
+</div>
+
+<div id="reviewOverlay" class="review-overlay" aria-hidden="true">
+  <div id="reviewWindow" class="review-window" role="dialog" aria-modal="true" aria-labelledby="reviewWindowTitle">
+    <div class="review-window-head">
+      <div>
+        <div id="reviewWindowTitle" class="review-window-title">簡易レビュー</div>
+        <div id="reviewWorkTitle" class="review-work-title"></div>
+      </div>
+      <button id="reviewWindowClose" class="close" type="button" aria-label="レビューを閉じる">×</button>
+    </div>
+
+    <div class="quick-rating">
+      <div class="quick-rating-head">
+        <strong>自分評価</strong>
+        <span id="quickRatingStatus">アプリに保存</span>
+      </div>
+
+      <div class="quick-star-area">
+        <button id="quickStarToggle" class="quick-star-toggle" type="button" aria-label="抜けたかどうかを切り替える">
+          <span id="quickStarGlyph">抜？</span>
+        </button>
+      </div>
+
+      <div id="quickRatingRows" class="quick-rating-rows"></div>
+
+      <button id="quickRatingReset" class="quick-rating-reset hidden" type="button">Excel取込時の評価に戻す</button>
+    </div>
+
+    <div class="review-window-actions">
+      <button id="reviewWindowClose2" class="secondary" type="button">閉じる</button>
+    </div>
   </div>
 </div>
 
@@ -1016,9 +1141,7 @@ function openDetail(w){
     document.getElementById("imageViewer").classList.add("show");
     document.getElementById("imageViewer").setAttribute("aria-hidden","false");
   };
-
-  renderQuickRating(w);
-  document.getElementById("reviewBtn").onclick=()=>alert(`本格レビュー機能は後のアップデートで接続します。\n\n作品ID：${w.work_id||w.fanza_id||""}\nタイトル：${w.title}`);
+  document.getElementById("reviewBtn").onclick=()=>openReviewWindow(w);
 
   const detail=document.getElementById("detail");
   detail.classList.add("show");
@@ -1035,12 +1158,33 @@ function updateDetailSpace(){
   document.documentElement.style.setProperty("--detail-space",`${h}px`);
 }
 function closeDetail(){
+  closeReviewWindow();
   document.getElementById("detail").classList.remove("show");
   document.body.classList.remove("detail-open");
   document.documentElement.style.setProperty("--detail-space","0px");
   currentDetailWork=null;
 }
 window.addEventListener("resize",()=>{ if(document.body.classList.contains("detail-open")) updateDetailSpace(); });
+
+let reviewTargetWork=null;
+
+function openReviewWindow(w){
+  reviewTargetWork=w;
+  document.getElementById("reviewWorkTitle").textContent=w.title||"";
+  renderQuickRating(w);
+
+  const overlay=document.getElementById("reviewOverlay");
+  overlay.classList.add("show");
+  overlay.setAttribute("aria-hidden","false");
+}
+
+function closeReviewWindow(){
+  const overlay=document.getElementById("reviewOverlay");
+  if(!overlay)return;
+  overlay.classList.remove("show");
+  overlay.setAttribute("aria-hidden","true");
+  reviewTargetWork=null;
+}
 
 function ratingRecord(w){
   const key=workKey(w);
@@ -1053,7 +1197,7 @@ function renderQuickRating(w){
 
   const glyph=document.getElementById("quickStarGlyph");
   const toggle=document.getElementById("quickStarToggle");
-  glyph.textContent=currentQuickStar?"★":"☆";
+  glyph.textContent=currentQuickStar?"抜き！":"抜？";
   toggle.classList.toggle("is-starred",currentQuickStar);
   toggle.onclick=()=>toggleQuickStar(w);
 
@@ -1124,7 +1268,7 @@ async function toggleQuickStar(w){
   renderQuickRating(w);
 
   const status=document.getElementById("quickRatingStatus");
-  status.textContent="星を保存済み";
+  status.textContent="状態を保存済み";
   status.classList.add("save-flash");
   requestAnimationFrame(updateDetailSpace);
 }
@@ -1203,6 +1347,17 @@ function refreshDetailRatings(w){
       `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`;
   }
 }
+document.getElementById("reviewWindowClose").onclick=closeReviewWindow;
+document.getElementById("reviewWindowClose2").onclick=closeReviewWindow;
+document.getElementById("reviewOverlay").onclick=e=>{
+  if(e.target.id==="reviewOverlay") closeReviewWindow();
+};
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape" && document.getElementById("reviewOverlay").classList.contains("show")){
+    closeReviewWindow();
+  }
+});
+
 document.getElementById("detailClose").onclick=closeDetail;
 document.getElementById("closeBtn2").onclick=closeDetail;
 
@@ -1302,10 +1457,10 @@ document.getElementById("csvFile").addEventListener("change",async e=>{
 
 
 document.getElementById("clearSavedData").onclick=async()=>{
-  if(!confirm("この端末に保存した蔵書データを消しますか？\nアプリ側の自分評価・★/☆は残します。"))return;
+  if(!confirm("この端末に保存した蔵書データを消しますか？\nアプリ側の自分評価・抜き状態は残します。"))return;
   try{
     await dbDelete(LIBRARY_KEY);
-    alert("保存済み蔵書データを消去しました。アプリ側の自分評価・★/☆は残しています。");
+    alert("保存済み蔵書データを消去しました。アプリ側の自分評価・抜き状態は残しています。");
   }catch(err){
     alert("保存データの消去に失敗しました。");
   }
