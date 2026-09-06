@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>MY LIFE 蔵書録 PWA試作 v0.21</title>
+<title>MY LIFE 蔵書録 PWA試作 v0.31</title>
 <style>
 :root{
   --bg:#f3f4f6;--panel:#fff;--line:#d7dbe0;--text:#1f2937;--muted:#6b7280;
@@ -128,6 +128,244 @@ details.test summary{font-weight:800;cursor:pointer}
   font-weight:700;
 }
 
+
+/* v0.30: saved data, cover shelf, scroll-safe detail panel, quick rating */
+body.detail-open .app{
+  padding-bottom:calc(var(--detail-space, 0px) + 14px);
+}
+.detail{
+  max-height:58vh;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.recent-strip{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:6px;
+  overflow:visible;
+  padding:10px 12px 12px;
+}
+.recent-cover-card{
+  position:relative;
+  border:0;
+  background:transparent;
+  padding:0;
+  min-width:0;
+  aspect-ratio:3/4.25;
+  border-radius:8px;
+  overflow:hidden;
+}
+.recent-cover{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+  background:#eef0f3;
+}
+.recent-cover-fallback{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:5px;
+  border:1px solid var(--line);
+  background:#f7f8fa;
+  font-size:10px;
+  line-height:1.25;
+  font-weight:700;
+}
+.recent-score{
+  position:absolute;
+  right:3px;
+  bottom:3px;
+  padding:2px 5px;
+  border-radius:999px;
+  background:rgba(255,255,255,.92);
+  border:1px solid rgba(0,0,0,.10);
+  font-size:10px;
+  font-weight:900;
+}
+.quick-rating{
+  margin-top:12px;
+  padding-top:10px;
+  border-top:1px solid var(--line);
+}
+.quick-rating-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  margin-bottom:7px;
+}
+.quick-rating-head strong{font-size:13px}
+.quick-rating-head span{font-size:11px;color:var(--muted)}
+.quick-rating-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:6px;
+}
+.quick-score-btn{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:9px;
+  min-height:36px;
+  font-weight:900;
+  font-size:13px;
+}
+.quick-score-btn.active{
+  border-color:var(--accent);
+  background:var(--accent);
+  color:#fff;
+}
+.quick-rating-clear{
+  margin-top:7px;
+  width:100%;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font-size:11px;
+  padding:4px;
+}
+.save-flash{
+  color:var(--accent)!important;
+  font-weight:800;
+}
+@media (min-width:700px){
+  .detail{width:min(100%,680px);max-height:62vh}
+  .recent-strip{gap:10px}
+}
+
+
+/* v0.31: reader/self rating separation + app-owned quick review */
+.detail-title{font-size:17px}
+.detail-meta{
+  font-size:13px;
+  line-height:1.7;
+  margin-top:8px;
+}
+.detail-ratings{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:10px;
+}
+.detail-rating-card{
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:9px 10px;
+  background:#fafbfc;
+}
+.detail-rating-label{
+  display:block;
+  font-size:12px;
+  color:var(--muted);
+  font-weight:700;
+  margin-bottom:2px;
+}
+.detail-rating-value{
+  display:block;
+  font-size:20px;
+  line-height:1.15;
+  font-weight:900;
+  letter-spacing:.01em;
+}
+.work-title{font-size:14px}
+.work-meta{font-size:12px}
+.score{font-size:13px}
+
+.quick-rating{
+  margin-top:12px;
+  padding-top:11px;
+  border-top:1px solid var(--line);
+}
+.quick-rating-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  margin-bottom:5px;
+}
+.quick-rating-head strong{font-size:14px}
+.quick-rating-head span{font-size:11px;color:var(--muted)}
+
+.quick-star-area{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:66px;
+  margin:0 0 7px;
+}
+.quick-star-toggle{
+  width:62px;
+  height:62px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  font-size:39px;
+  line-height:1;
+  font-weight:900;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  touch-action:manipulation;
+}
+.quick-star-toggle.is-starred{
+  border-color:var(--accent);
+  background:#fff;
+}
+.quick-rating-rows{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+.quick-score-row{
+  display:grid;
+  gap:6px;
+}
+.quick-score-row.cols-6{grid-template-columns:repeat(6,minmax(0,1fr))}
+.quick-score-row.cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.quick-score-row.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.quick-score-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.quick-score-row.low-row{
+  padding-top:7px;
+  border-top:1px dashed var(--line);
+}
+.quick-score-btn{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:9px;
+  min-height:42px;
+  padding:5px 2px;
+  font-weight:900;
+  font-size:12px;
+  touch-action:manipulation;
+}
+.quick-score-row.cols-2 .quick-score-btn,
+.quick-score-row.cols-3 .quick-score-btn{
+  font-size:14px;
+}
+.quick-score-btn.active{
+  border-color:var(--accent);
+  background:var(--accent);
+  color:#fff;
+}
+.quick-rating-reset{
+  margin-top:8px;
+  width:100%;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font-size:11px;
+  padding:5px;
+}
+@media (max-width:360px){
+  .quick-score-row{gap:4px}
+  .quick-score-btn{font-size:11px;min-height:40px}
+  .detail-rating-value{font-size:19px}
+}
+
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
@@ -137,7 +375,7 @@ details.test summary{font-weight:800;cursor:pointer}
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">ナビ試作 v0.63</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.31</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -146,18 +384,16 @@ details.test summary{font-weight:800;cursor:pointer}
 </header>
 
 <details class="test">
-  <summary>検証メニュー（普段は閉じてOK）</summary>
+  <summary>データ管理</summary>
   <div class="test-grid">
-    <button id="test100">100件で試す</button>
-    <button id="test2000">2000件で試す</button>
-    <label class="file-label">CSVを読み込む<input id="csvFile" type="file" accept=".csv,text/csv" hidden></label>
-    <button id="restoreBuiltIn">内蔵2000件へ戻す</button>
+    <label class="file-label">CSVを更新<input id="csvFile" type="file" accept=".csv,text/csv" hidden></label>
+    <button id="clearSavedData">蔵書データを消去</button>
   </div>
-  <div id="testNote" class="test-note">初期状態は2000件の模擬蔵書＋英語・数字サークルのデモです。上部の「かな／英語／数字」で文字種を切り替えます。</div>
+  <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
 <section class="section">
-  <div class="section-head"><h2>最近の5作品</h2><span class="hint">購入日の新しい順</span></div>
+  <div class="section-head"><h2>最新5冊</h2><span class="hint">表紙をタップ</span></div>
   <div id="recentStrip" class="recent-strip"></div>
 </section>
 
@@ -206,6 +442,7 @@ details.test summary{font-weight:800;cursor:pointer}
     <div class="detail-heading">
       <a id="detailTitleLink" class="detail-title detail-title-link" href="#" target="_blank" rel="noopener"></a>
       <div id="detailMeta" class="detail-meta"></div>
+      <div id="detailRatings" class="detail-ratings"></div>
     </div>
     <button id="detailClose" class="close" aria-label="閉じる">×</button>
   </div>
@@ -215,6 +452,23 @@ details.test summary{font-weight:800;cursor:pointer}
       <img id="detailCover" class="detail-cover" alt="作品表紙">
     </button>
     <div class="cover-note">表紙をタップで拡大</div>
+  </div>
+
+  <div class="quick-rating">
+    <div class="quick-rating-head">
+      <strong>簡易評価</strong>
+      <span id="quickRatingStatus">アプリに保存</span>
+    </div>
+
+    <div class="quick-star-area">
+      <button id="quickStarToggle" class="quick-star-toggle" type="button" aria-label="簡易評価の星を切り替える">
+        <span id="quickStarGlyph">☆</span>
+      </button>
+    </div>
+
+    <div id="quickRatingRows" class="quick-rating-rows"></div>
+
+    <button id="quickRatingReset" class="quick-rating-reset hidden" type="button">Excel取込時の評価に戻す</button>
   </div>
 
   <div class="detail-actions detail-actions-three">
@@ -238,10 +492,130 @@ const latinRows=[latinLetters.slice(0,5),latinLetters.slice(5,10),latinLetters.s
 const kataToHira=s=>(s||"").replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));
 const norm=s=>kataToHira(String(s||"").trim()).toLowerCase();
 
-let builtIn, works=[], authors=[], worksByAuthor=new Map(), authorsByKana=new Map(), activeLimit=2000;
-let purchaseShown=0, lastPerf="";
+let builtIn, works=[], authors=[], worksByAuthor=new Map(), authorsByKana=new Map();
+let purchaseShown=0, lastPerf="", appRatings={}, currentDetailWork=null, currentAuthorForWorks=null;
+let currentQuickStar=false;
 
-function initialLoad(){
+const DB_NAME="my-life-pwa";
+const DB_VERSION=1;
+const STORE="kv";
+const LIBRARY_KEY="libraryData";
+const APP_RATINGS_KEY="appRatingsV1";
+const LEGACY_QUICK_KEY="quickScores";
+
+const QUICK_SCORES_STAR_TOP=["5.00","4.90","4.70"];
+const QUICK_SCORES_STAR_BOTTOM=["4.50","4.30","4.10","4.00"];
+const QUICK_SCORES_EMPTY_TOP=["4.90","4.70","4.50","4.30","4.10","4.00"];
+const QUICK_SCORES_EMPTY_BOTTOM=["3.00","1.00"];
+
+function openMyLifeDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE); };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function dbGet(key){
+  const db=await openMyLifeDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,"readonly");
+    const req=tx.objectStore(STORE).get(key);
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function dbPut(key,value){
+  const db=await openMyLifeDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,"readwrite");
+    tx.objectStore(STORE).put(value,key);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function dbDelete(key){
+  const db=await openMyLifeDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,"readwrite");
+    tx.objectStore(STORE).delete(key);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+
+function workKey(w){ return String(w.work_id||w.fanza_id||""); }
+
+function formatScore(value){
+  const raw=String(value??"").trim();
+  if(!raw)return "";
+  const n=Number(raw);
+  if(Number.isFinite(n))return n.toFixed(2);
+  return raw;
+}
+
+function excelSelfScoreOf(w){
+  if(w.excel_self_score!==undefined && w.excel_self_score!==null) return String(w.excel_self_score).trim();
+  if(w.score!==undefined && w.score!==null) return String(w.score).trim();
+  return "";
+}
+
+async function loadAppRatings(){
+  appRatings=(await dbGet(APP_RATINGS_KEY))||{};
+
+  // v0.30で簡易点数を試していた場合も無駄にしない。
+  const legacy=(await dbGet(LEGACY_QUICK_KEY))||{};
+  let dirty=false;
+  for(const [key,val] of Object.entries(legacy)){
+    if(!appRatings[key]){
+      appRatings[key]={
+        score:formatScore(val),
+        star:null,
+        source:"legacy_app",
+        updated_at:null
+      };
+      dirty=true;
+    }
+  }
+  if(dirty) await dbPut(APP_RATINGS_KEY,appRatings);
+}
+
+async function seedAppRatingsFromWorks(ws){
+  let dirty=false;
+  for(const w of ws){
+    const key=workKey(w);
+    if(!key || appRatings[key])continue;
+
+    const raw=excelSelfScoreOf(w);
+    if(raw!==""){
+      appRatings[key]={
+        score:formatScore(raw),
+        star:null,
+        source:"excel_import",
+        updated_at:null
+      };
+      dirty=true;
+    }
+  }
+  if(dirty) await dbPut(APP_RATINGS_KEY,appRatings);
+}
+
+function applyAppRatings(ws){
+  return ws.map(w=>{
+    const copy={...w};
+    const key=workKey(copy);
+    const rawExcel=excelSelfScoreOf(copy);
+    copy.excel_self_score=rawExcel;
+    copy.reader_score=formatScore(copy.reader_score);
+
+    const app=key?appRatings[key]:null;
+    const effective=app?.score!==undefined ? app.score : formatScore(rawExcel);
+    copy.score=formatScore(effective);
+    return copy;
+  });
+}
+
+async function initialLoad(){
   const t0=performance.now();
   builtIn=JSON.parse(document.getElementById("builtInData").textContent);
   const demoCreators=[
@@ -257,24 +631,46 @@ function initialLoad(){
     builtIn.works.push({
       work_id:`demo_${i+1}`,fanza_id:`demo_${i+1}`,title:`${name} のデモ作品`,
       author:name,author_kana:kana,circle:name,purchase_date:`2026-09-${String(i+1).padStart(2,"0")}`,
-      score:"未読",product_url:"#"
+      score:"未読",excel_self_score:"未読",reader_score:"4.71",product_url:"#"
     });
   }
+
+  try{
+    await loadAppRatings();
+    const saved=await dbGet(LIBRARY_KEY);
+    const t1=performance.now();
+    if(saved && Array.isArray(saved.works) && saved.works.length){
+      await seedAppRatingsFromWorks(saved.works);
+      loadData(saved.works,saved.authors||null,"保存済み実データ",t1-t0);
+      return;
+    }
+  }catch(err){
+    console.warn("保存データ読込失敗:",err);
+  }
+
   const t1=performance.now();
-  loadData(builtIn.works, builtIn.authors, `内蔵2000件`, t1-t0);
+  await seedAppRatingsFromWorks(builtIn.works);
+  loadData(builtIn.works,builtIn.authors,"初回デモ（CSVを読み込んでください）",t1-t0);
 }
 
 function loadData(newWorks,newAuthors,label,parseMs=0){
   const t0=performance.now();
-  works=newWorks.slice();
-  authors=(newAuthors && newAuthors.length?newAuthors:deriveAuthors(works)).slice();
+  works=applyAppRatings(newWorks);
+  authors=(newAuthors && newAuthors.length?newAuthors:deriveAuthors(works)).map(a=>({...a}));
   buildIndexes();
   const t1=performance.now();
   renderRecent();
   renderPurchaseReset();
   clearNavigator();
+  closeDetail();
   const t2=performance.now();
   setPerf(`${label}`,parseMs,t1-t0,t2-t1);
+
+  const hasReader=works.some(w=>String(w.reader_score||"").trim()!=="");
+  if(!hasReader && label.includes("保存済み実データ")){
+    document.getElementById("testNote").textContent=
+      "保存済み蔵書を使用中。読者評価を反映するため、この版では一度だけ「CSVを更新」してください。自分評価はアプリ側の値を維持します。";
+  }
 }
 
 function deriveAuthors(ws){
@@ -483,14 +879,15 @@ function renderAuthors(k,label=k){
 }
 function showWorks(author){
   const t0=performance.now();
+  currentAuthorForWorks=author;
   authorArea.classList.add("hidden");workArea.classList.remove("hidden");
   workHeader.innerHTML=`<button id="backAuthors" class="back-btn">← サークル一覧</button>　<b>${escapeHtml(author.author)}</b>`;
   workList.innerHTML="";
   const ws=(worksByAuthor.get(author.author)||[]).slice().sort((a,b)=>(b.purchase_date||"").localeCompare(a.purchase_date||""));
   const frag=document.createDocumentFragment();
   for(const w of ws){
-    const b=document.createElement("button");b.className="work-row";
-    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(w.score||"")}</span></div><div class="work-meta">${escapeHtml(w.purchase_date||"")}　ID: ${escapeHtml(w.work_id||"")}</div>`;
+    const b=document.createElement("button");b.className="work-row";b.dataset.workId=workKey(w);
+    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(formatScore(w.score)||"")}</span></div><div class="work-meta">${escapeHtml(w.purchase_date||"")}　ID: ${escapeHtml(w.work_id||"")}</div>`;
     b.onclick=()=>openDetail(w);frag.appendChild(b);
   }
   workList.appendChild(frag);
@@ -501,9 +898,38 @@ function renderRecent(){
   const t0=performance.now(), el=document.getElementById("recentStrip");el.innerHTML="";
   const list=works.slice().sort((a,b)=>(b.purchase_date||"").localeCompare(a.purchase_date||"")).slice(0,5);
   for(const w of list){
-    const b=document.createElement("button");b.className="recent-card";
-    b.innerHTML=`<div class="t">${escapeHtml(w.title)}</div><div class="s">${escapeHtml(w.author)}<br>評価 ${escapeHtml(w.score||"")}</div>`;
-    b.onclick=()=>openDetail(w);el.appendChild(b);
+    const b=document.createElement("button");
+    b.className="recent-cover-card";
+    b.dataset.workId=workKey(w);
+    b.title=w.title||"";
+    const cover=(w.cover_url||"").trim();
+    if(cover){
+      const img=document.createElement("img");
+      img.className="recent-cover";
+      img.src=cover;
+      img.alt=w.title||"作品表紙";
+      img.loading="eager";
+      img.onerror=()=>{
+        const f=document.createElement("div");
+        f.className="recent-cover-fallback";
+        f.textContent=w.title||"画像なし";
+        img.replaceWith(f);
+      };
+      b.appendChild(img);
+    }else{
+      const f=document.createElement("div");
+      f.className="recent-cover-fallback";
+      f.textContent=w.title||"画像なし";
+      b.appendChild(f);
+    }
+    if(w.score){
+      const sc=document.createElement("span");
+      sc.className="recent-score score";
+      sc.textContent=formatScore(w.score);
+      b.appendChild(sc);
+    }
+    b.onclick=()=>openDetail(w);
+    el.appendChild(b);
   }
   return performance.now()-t0;
 }
@@ -514,8 +940,8 @@ function renderPurchaseMore(){
   const sorted=works.slice().sort((a,b)=>(b.purchase_date||"").localeCompare(a.purchase_date||""));
   const next=sorted.slice(purchaseShown,purchaseShown+60), el=document.getElementById("purchaseList"), frag=document.createDocumentFragment();
   for(const w of next){
-    const b=document.createElement("button");b.className="work-row";
-    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(w.score||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.purchase_date||"")}</div>`;
+    const b=document.createElement("button");b.className="work-row";b.dataset.workId=workKey(w);
+    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(formatScore(w.score)||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.purchase_date||"")}</div>`;
     b.onclick=()=>openDetail(w);frag.appendChild(b);
   }
   el.appendChild(frag);purchaseShown+=next.length;
@@ -526,6 +952,7 @@ function renderPurchaseMore(){
 document.getElementById("purchaseMore").onclick=renderPurchaseMore;
 
 function openDetail(w){
+  currentDetailWork=w;
   const productUrl=(w.product_url||"").trim();
   const coverUrl=(w.cover_url||"").trim();
 
@@ -551,8 +978,13 @@ function openDetail(w){
   if(w.creator && w.creator!==w.circle) meta.push(`作者：${escapeHtml(w.creator)}`);
   if(w.purchase_date) meta.push(`購入日：${escapeHtml(w.purchase_date)}`);
   meta.push(`作品ID：${escapeHtml(w.work_id||w.fanza_id||"")}`);
-  if(w.score) meta.push(`現在評価：${escapeHtml(w.score)}`);
   document.getElementById("detailMeta").innerHTML=meta.join("<br>");
+
+  const readerScore=formatScore(w.reader_score)||"—";
+  const selfScore=formatScore(w.score)||"未読";
+  document.getElementById("detailRatings").innerHTML=
+    `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
+    `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`;
 
   const productBtn=document.getElementById("productBtn");
   if(productUrl && productUrl!=="#"){
@@ -585,10 +1017,192 @@ function openDetail(w){
     document.getElementById("imageViewer").setAttribute("aria-hidden","false");
   };
 
-  document.getElementById("reviewBtn").onclick=()=>alert(`レビュー機能は後のアップデートで接続します。\n\n作品ID：${w.work_id||w.fanza_id||""}\nタイトル：${w.title}`);
-  document.getElementById("detail").classList.add("show");
+  renderQuickRating(w);
+  document.getElementById("reviewBtn").onclick=()=>alert(`本格レビュー機能は後のアップデートで接続します。\n\n作品ID：${w.work_id||w.fanza_id||""}\nタイトル：${w.title}`);
+
+  const detail=document.getElementById("detail");
+  detail.classList.add("show");
+  document.body.classList.add("detail-open");
+  requestAnimationFrame(updateDetailSpace);
 }
-function closeDetail(){document.getElementById("detail").classList.remove("show")}
+function updateDetailSpace(){
+  const detail=document.getElementById("detail");
+  if(!detail.classList.contains("show")){
+    document.documentElement.style.setProperty("--detail-space","0px");
+    return;
+  }
+  const h=Math.ceil(detail.getBoundingClientRect().height);
+  document.documentElement.style.setProperty("--detail-space",`${h}px`);
+}
+function closeDetail(){
+  document.getElementById("detail").classList.remove("show");
+  document.body.classList.remove("detail-open");
+  document.documentElement.style.setProperty("--detail-space","0px");
+  currentDetailWork=null;
+}
+window.addEventListener("resize",()=>{ if(document.body.classList.contains("detail-open")) updateDetailSpace(); });
+
+function ratingRecord(w){
+  const key=workKey(w);
+  return key?appRatings[key]:null;
+}
+
+function renderQuickRating(w){
+  const rec=ratingRecord(w);
+  currentQuickStar=rec?.star===true;
+
+  const glyph=document.getElementById("quickStarGlyph");
+  const toggle=document.getElementById("quickStarToggle");
+  glyph.textContent=currentQuickStar?"★":"☆";
+  toggle.classList.toggle("is-starred",currentQuickStar);
+  toggle.onclick=()=>toggleQuickStar(w);
+
+  const rows=document.getElementById("quickRatingRows");
+  rows.innerHTML="";
+  const active=formatScore(w.score);
+
+  const rowDefs=currentQuickStar
+    ? [
+        {scores:QUICK_SCORES_STAR_TOP, cls:"cols-3"},
+        {scores:QUICK_SCORES_STAR_BOTTOM, cls:"cols-4"}
+      ]
+    : [
+        {scores:QUICK_SCORES_EMPTY_TOP, cls:"cols-6"},
+        {scores:QUICK_SCORES_EMPTY_BOTTOM, cls:"cols-2 low-row"}
+      ];
+
+  for(const def of rowDefs){
+    const row=document.createElement("div");
+    row.className=`quick-score-row ${def.cls}`;
+    for(const score of def.scores){
+      const b=document.createElement("button");
+      b.type="button";
+      b.className="quick-score-btn"+(active===score?" active":"");
+      b.textContent=score;
+      b.onclick=()=>saveAppScore(w,score,currentQuickStar);
+      row.appendChild(b);
+    }
+    rows.appendChild(row);
+  }
+
+  const status=document.getElementById("quickRatingStatus");
+  if(rec?.source==="app" || rec?.source==="legacy_app"){
+    status.textContent="アプリ保存済み";
+  }else if(rec?.source==="excel_import"){
+    status.textContent="Excelから初期移行";
+  }else{
+    status.textContent="アプリに保存";
+  }
+  status.classList.remove("save-flash");
+
+  const reset=document.getElementById("quickRatingReset");
+  const canReset=!!rec && (rec.source==="app" || rec.source==="legacy_app");
+  reset.classList.toggle("hidden",!canReset);
+  reset.onclick=()=>resetAppRatingToExcel(w);
+}
+
+async function toggleQuickStar(w){
+  currentQuickStar=!currentQuickStar;
+  const key=workKey(w);
+  if(!key)return;
+
+  const prev=appRatings[key]||{
+    score:formatScore(w.score),
+    star:null,
+    source:"excel_import",
+    updated_at:null
+  };
+
+  appRatings[key]={
+    ...prev,
+    star:currentQuickStar,
+    source:"app",
+    updated_at:new Date().toISOString()
+  };
+
+  try{ await dbPut(APP_RATINGS_KEY,appRatings); }catch(err){ console.warn(err); }
+  renderQuickRating(w);
+
+  const status=document.getElementById("quickRatingStatus");
+  status.textContent="星を保存済み";
+  status.classList.add("save-flash");
+  requestAnimationFrame(updateDetailSpace);
+}
+
+async function saveAppScore(w,score,starState){
+  const key=workKey(w);
+  if(!key)return;
+
+  const normalized=formatScore(score);
+  appRatings[key]={
+    score:normalized,
+    star:!!starState,
+    source:"app",
+    updated_at:new Date().toISOString()
+  };
+
+  w.score=normalized;
+  const live=works.find(x=>workKey(x)===key);
+  if(live) live.score=normalized;
+
+  try{ await dbPut(APP_RATINGS_KEY,appRatings); }catch(err){ console.warn(err); }
+
+  updateScoreDisplays(key,normalized);
+  renderQuickRating(w);
+  refreshDetailRatings(w);
+
+  const status=document.getElementById("quickRatingStatus");
+  status.textContent=`${normalized} 保存済み`;
+  status.classList.add("save-flash");
+  requestAnimationFrame(updateDetailSpace);
+}
+
+async function resetAppRatingToExcel(w){
+  const key=workKey(w);
+  if(!key)return;
+
+  const initial=formatScore(w.excel_self_score);
+  if(initial!==""){
+    appRatings[key]={
+      score:initial,
+      star:null,
+      source:"excel_import",
+      updated_at:null
+    };
+    w.score=initial;
+  }else{
+    delete appRatings[key];
+    w.score="";
+  }
+
+  const live=works.find(x=>workKey(x)===key);
+  if(live) live.score=w.score;
+
+  try{ await dbPut(APP_RATINGS_KEY,appRatings); }catch(err){ console.warn(err); }
+
+  currentQuickStar=false;
+  updateScoreDisplays(key,w.score);
+  renderQuickRating(w);
+  refreshDetailRatings(w);
+  requestAnimationFrame(updateDetailSpace);
+}
+
+function updateScoreDisplays(key,score){
+  document.querySelectorAll(`[data-work-id="${CSS.escape(key)}"] .score`).forEach(el=>{
+    el.textContent=formatScore(score)||"";
+  });
+  renderRecent();
+}
+
+function refreshDetailRatings(w){
+  if(currentDetailWork && workKey(currentDetailWork)===workKey(w)){
+    const readerScore=formatScore(w.reader_score)||"—";
+    const selfScore=formatScore(w.score)||"未読";
+    document.getElementById("detailRatings").innerHTML=
+      `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
+      `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`;
+  }
+}
 document.getElementById("detailClose").onclick=closeDetail;
 document.getElementById("closeBtn2").onclick=closeDetail;
 
@@ -621,8 +1235,8 @@ function runSearch(raw){
   }
   const frag=document.createDocumentFragment();
   for(const w of matches){
-    const b=document.createElement("button");b.className="work-row";
-    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(w.score||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.work_id||"")}</div>`;
+    const b=document.createElement("button");b.className="work-row";b.dataset.workId=workKey(w);
+    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(formatScore(w.score)||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.work_id||"")}</div>`;
     b.onclick=()=>openDetail(w);frag.appendChild(b);
   }
   out.appendChild(frag);
@@ -630,12 +1244,6 @@ function runSearch(raw){
   setActionPerf(`2000件検索`,performance.now()-t0);
 }
 
-document.getElementById("test100").onclick=()=>{
-  const sample=builtIn.works.slice(0,100);const names=new Set(sample.map(w=>w.author));const as=builtIn.authors.filter(a=>names.has(a.author));
-  loadData(sample,as,"内蔵100件");
-};
-document.getElementById("test2000").onclick=()=>loadData(builtIn.works,builtIn.authors,"内蔵2000件");
-document.getElementById("restoreBuiltIn").onclick=()=>loadData(builtIn.works,builtIn.authors,"内蔵2000件");
 
 document.getElementById("csvFile").addEventListener("change",async e=>{
   const f=e.target.files[0];if(!f)return;
@@ -651,7 +1259,8 @@ document.getElementById("csvFile").addEventListener("change",async e=>{
     kana:idx(["author_kana","作者よみ","作者読み","作者かな"]),
     circle:idx(["circle","サークル"]),
     date:idx(["purchase_date","購入日"]),
-    score:idx(["score","自分評価"]),
+    score:idx(["score","self_score","自分評価"]),
+    reader_score:idx(["reader_score","読者評価","reader_rating"]),
     url:idx(["product_url","作品URL"]),
     cover:idx(["cover_url","表紙URL","画像URL"]),
     creator:idx(["creator","作者名","作品作者"]),
@@ -666,15 +1275,41 @@ document.getElementById("csvFile").addEventListener("change",async e=>{
     author_kana:ix.kana>=0?r[ix.kana]:(r[ix.author]||""),
     circle:ix.circle>=0?r[ix.circle]:"",
     purchase_date:ix.date>=0?r[ix.date]:"",
+    excel_self_score:ix.score>=0?r[ix.score]:"",
     score:ix.score>=0?r[ix.score]:"",
+    reader_score:ix.reader_score>=0?r[ix.reader_score]:"",
     product_url:ix.url>=0?r[ix.url]:"",
     cover_url:ix.cover>=0?r[ix.cover]:"",
     creator:ix.creator>=0?r[ix.creator]:"",
     circle_url:ix.circle_url>=0?r[ix.circle_url]:""
   }));
-  loadData(ws,null,`CSV ${f.name}`,t1-t0);
+  const as=deriveAuthors(ws);
+  try{
+    await seedAppRatingsFromWorks(ws);
+    await dbPut(LIBRARY_KEY,{
+      works:ws,
+      authors:as,
+      file_name:f.name,
+      saved_at:new Date().toISOString()
+    });
+  }catch(err){
+    console.warn("CSV保存失敗:",err);
+    alert("CSVは読み込めましたが、端末への保存に失敗しました。");
+  }
+  loadData(ws,as,`保存済みCSV ${f.name}`,t1-t0);
   e.target.value="";
 });
+
+
+document.getElementById("clearSavedData").onclick=async()=>{
+  if(!confirm("この端末に保存した蔵書データを消しますか？\nアプリ側の自分評価・★/☆は残します。"))return;
+  try{
+    await dbDelete(LIBRARY_KEY);
+    alert("保存済み蔵書データを消去しました。アプリ側の自分評価・★/☆は残しています。");
+  }catch(err){
+    alert("保存データの消去に失敗しました。");
+  }
+};
 
 function parseCSV(text){
   const out=[];let row=[],field="",q=false;
@@ -695,7 +1330,7 @@ function parseCSV(text){
 }
 function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 
-initialLoad();
+initialLoad().catch(err=>{console.error(err);alert("初期データの読み込みに失敗しました。");});
 </script>
 
 <script>
