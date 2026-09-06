@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>MY LIFE 蔵書録 PWA試作 v0.32</title>
+<title>MY LIFE 蔵書録 PWA試作 v0.33</title>
 <style>
 :root{
   --bg:#f3f4f6;--panel:#fff;--line:#d7dbe0;--text:#1f2937;--muted:#6b7280;
@@ -484,7 +484,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.32</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.33</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -677,6 +677,21 @@ function formatScore(value){
   const n=Number(raw);
   if(Number.isFinite(n))return n.toFixed(2);
   return raw;
+}
+
+function formatSelfScore(value){
+  const raw=String(value??"").trim();
+  if(!raw)return "";
+  const n=Number(raw);
+  if(Number.isFinite(n))return n.toFixed(1);
+  return raw;
+}
+
+function selfScoreDisplay(w){
+  const score=formatSelfScore(w?.score);
+  if(!score)return "";
+  const rec=ratingRecord(w);
+  return rec?.star===true ? `★${score}` : score;
 }
 
 function excelSelfScoreOf(w){
@@ -1012,7 +1027,7 @@ function showWorks(author){
   const frag=document.createDocumentFragment();
   for(const w of ws){
     const b=document.createElement("button");b.className="work-row";b.dataset.workId=workKey(w);
-    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(formatScore(w.score)||"")}</span></div><div class="work-meta">${escapeHtml(w.purchase_date||"")}　ID: ${escapeHtml(w.work_id||"")}</div>`;
+    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(selfScoreDisplay(w)||"")}</span></div><div class="work-meta">${escapeHtml(w.purchase_date||"")}　ID: ${escapeHtml(w.work_id||"")}</div>`;
     b.onclick=()=>openDetail(w);frag.appendChild(b);
   }
   workList.appendChild(frag);
@@ -1050,7 +1065,7 @@ function renderRecent(){
     if(w.score){
       const sc=document.createElement("span");
       sc.className="recent-score score";
-      sc.textContent=formatScore(w.score);
+      sc.textContent=selfScoreDisplay(w);
       b.appendChild(sc);
     }
     b.onclick=()=>openDetail(w);
@@ -1066,7 +1081,7 @@ function renderPurchaseMore(){
   const next=sorted.slice(purchaseShown,purchaseShown+60), el=document.getElementById("purchaseList"), frag=document.createDocumentFragment();
   for(const w of next){
     const b=document.createElement("button");b.className="work-row";b.dataset.workId=workKey(w);
-    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(formatScore(w.score)||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.purchase_date||"")}</div>`;
+    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(selfScoreDisplay(w)||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.purchase_date||"")}</div>`;
     b.onclick=()=>openDetail(w);frag.appendChild(b);
   }
   el.appendChild(frag);purchaseShown+=next.length;
@@ -1106,7 +1121,7 @@ function openDetail(w){
   document.getElementById("detailMeta").innerHTML=meta.join("<br>");
 
   const readerScore=formatScore(w.reader_score)||"—";
-  const selfScore=formatScore(w.score)||"未読";
+  const selfScore=selfScoreDisplay(w)||"未読";
   document.getElementById("detailRatings").innerHTML=
     `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
     `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`;
@@ -1222,7 +1237,7 @@ function renderQuickRating(w){
       const b=document.createElement("button");
       b.type="button";
       b.className="quick-score-btn"+(active===score?" active":"");
-      b.textContent=score;
+      b.textContent=formatSelfScore(score);
       b.onclick=()=>saveAppScore(w,score,currentQuickStar);
       row.appendChild(b);
     }
@@ -1265,6 +1280,11 @@ async function toggleQuickStar(w){
   };
 
   try{ await dbPut(APP_RATINGS_KEY,appRatings); }catch(err){ console.warn(err); }
+
+  const live=works.find(x=>workKey(x)===key);
+  if(live) live.score=w.score;
+  updateScoreDisplays(key,w.score);
+  refreshDetailRatings(w);
   renderQuickRating(w);
 
   const status=document.getElementById("quickRatingStatus");
@@ -1296,7 +1316,7 @@ async function saveAppScore(w,score,starState){
   refreshDetailRatings(w);
 
   const status=document.getElementById("quickRatingStatus");
-  status.textContent=`${normalized} 保存済み`;
+  status.textContent=`${formatSelfScore(normalized)} 保存済み`;
   status.classList.add("save-flash");
   requestAnimationFrame(updateDetailSpace);
 }
@@ -1332,8 +1352,10 @@ async function resetAppRatingToExcel(w){
 }
 
 function updateScoreDisplays(key,score){
+  const target=works.find(x=>workKey(x)===key);
+  const shown=target?selfScoreDisplay(target):formatSelfScore(score);
   document.querySelectorAll(`[data-work-id="${CSS.escape(key)}"] .score`).forEach(el=>{
-    el.textContent=formatScore(score)||"";
+    el.textContent=shown||"";
   });
   renderRecent();
 }
@@ -1341,7 +1363,7 @@ function updateScoreDisplays(key,score){
 function refreshDetailRatings(w){
   if(currentDetailWork && workKey(currentDetailWork)===workKey(w)){
     const readerScore=formatScore(w.reader_score)||"—";
-    const selfScore=formatScore(w.score)||"未読";
+    const selfScore=selfScoreDisplay(w)||"未読";
     document.getElementById("detailRatings").innerHTML=
       `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
       `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`;
@@ -1391,7 +1413,7 @@ function runSearch(raw){
   const frag=document.createDocumentFragment();
   for(const w of matches){
     const b=document.createElement("button");b.className="work-row";b.dataset.workId=workKey(w);
-    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(formatScore(w.score)||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.work_id||"")}</div>`;
+    b.innerHTML=`<div class="work-title">${escapeHtml(w.title)}<span class="score">${escapeHtml(selfScoreDisplay(w)||"")}</span></div><div class="work-meta">${escapeHtml(w.author)}　${escapeHtml(w.work_id||"")}</div>`;
     b.onclick=()=>openDetail(w);frag.appendChild(b);
   }
   out.appendChild(frag);
