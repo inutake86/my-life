@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>MY LIFE 蔵書録 PWA試作 v0.34 HEART TEST</title>
+<title>MY LIFE 蔵書録 PWA試作 v0.35 HEART LAYOUT TEST</title>
 <style>
 :root{
   --bg:#f3f4f6;--panel:#fff;--line:#d7dbe0;--text:#1f2937;--muted:#6b7280;
@@ -54,12 +54,16 @@ h1{font-size:18px;margin:0}.badge{font-size:11px;color:var(--muted)}
 /* v0.34 test: FANZA-like read heart + score badge beside meta */
 .work-row{position:relative;padding-right:42px}
 .work-title{line-height:1.38}
-.read-heart{position:absolute;right:12px;top:9px;width:22px;text-align:center;font-size:19px;line-height:1;font-weight:800}
-.read-heart.unread{color:#aeb6c1}
-.read-heart.read{color:#e5484d}
+.read-heart{position:absolute;right:12px;top:9px;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+.read-heart svg{width:19px;height:19px;display:block}
+.read-heart.unread svg{fill:none;stroke:#aeb6c1;stroke-width:2}
+.read-heart.read svg{fill:#e5484d;stroke:#e5484d;stroke-width:2}
 .work-meta-line{display:flex;align-items:center;gap:7px;min-width:0;margin-top:4px}
 .work-meta-line .work-meta{margin-top:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .score-badge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:34px;height:22px;padding:0 7px;border-radius:999px;background:#e9eef5;color:#334155;font-size:12px;font-weight:900;line-height:1}
+.work-row.purchase-row{padding-right:58px}
+.work-row.purchase-row .work-meta-line{padding-right:0}
+.work-row.purchase-row .score-badge{position:absolute;right:12px;top:34px;margin:0}
 .score-badge.high{background:#fff0c2;color:#8a4b00;border:1px solid #f2cf72}
 .score-badge.starred{background:#fff5cc;color:#7a4b00;border:1px solid #d8ad38;box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}
 
@@ -721,7 +725,8 @@ function workRowHtml(w,meta){
   const score=read ? formatSelfScore(w.score) : "";
   const display=starred ? `★${score}` : score;
   const cls=starred ? "score-badge starred" : (n!==null && n>=4.7 ? "score-badge high" : "score-badge");
-  return `<div class="read-heart ${read?"read":"unread"}" aria-label="${read?"既読":"未読"}">${read?"❤":"♡"}</div>`+
+  const heartSvg=`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s-7.2-4.35-9.55-8.55C.7 9.3 2.15 5.5 5.9 4.45 8.1 3.83 10.2 4.6 12 6.45c1.8-1.85 3.9-2.62 6.1-2 3.75 1.05 5.2 4.85 3.45 8C19.2 16.65 12 21 12 21Z"/></svg>`;
+  return `<div class="read-heart ${read?"read":"unread"}" aria-label="${read?"既読":"未読"}">${heartSvg}</div>`+
     `<div class="work-title">${escapeHtml(w.title)}</div>`+
     `<div class="work-meta-line"><div class="work-meta">${escapeHtml(meta||"")}</div>${read?`<span class="${cls}">${escapeHtml(display)}</span>`:""}</div>`;
 }
@@ -1112,7 +1117,7 @@ function renderPurchaseMore(){
   const sorted=works.slice().sort((a,b)=>(b.purchase_date||"").localeCompare(a.purchase_date||""));
   const next=sorted.slice(purchaseShown,purchaseShown+60), el=document.getElementById("purchaseList"), frag=document.createDocumentFragment();
   for(const w of next){
-    const b=document.createElement("button");b.className="work-row";b.dataset.workId=workKey(w);
+    const b=document.createElement("button");b.className="work-row purchase-row";b.dataset.workId=workKey(w);
     b.innerHTML=workRowHtml(w,`${w.author||w.circle||""}　${w.purchase_date||""}`);
     b.onclick=()=>openDetail(w);frag.appendChild(b);
   }
