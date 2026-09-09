@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>MY LIFE 蔵書録 PWA試作 v0.36 VALUE MARK TEST</title>
+<title>MY LIFE 蔵書録 PWA試作 v0.37</title>
 <style>
 :root{
   --bg:#f3f4f6;--panel:#fff;--line:#d7dbe0;--text:#1f2937;--muted:#6b7280;
@@ -78,8 +78,8 @@ details.test summary{font-weight:800;cursor:pointer}
 .test-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}
 .test-grid button,.file-label{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px;font-weight:700;text-align:center}
 .test-note{color:var(--muted);font-size:11px;line-height:1.5;margin-top:8px}
-.detail{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,520px);z-index:50;background:#fff;border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(0,0,0,.12);padding:12px 14px calc(12px + env(safe-area-inset-bottom));display:none}
-.detail.show{display:block}.detail-top{display:flex;justify-content:space-between;gap:10px}.detail-title{font-weight:900;font-size:16px;line-height:1.35}
+.detail{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,520px);z-index:50;background:#fff;border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(0,0,0,.12);padding:12px 14px calc(12px + env(safe-area-inset-bottom));display:none;touch-action:pan-y;will-change:transform,box-shadow}
+.detail.show{display:block}.detail.swipe-dragging{transition:none;box-shadow:0 -14px 34px rgba(0,0,0,.18)}.detail.swipe-settling{transition:transform .22s cubic-bezier(.22,.75,.28,1),box-shadow .22s ease}.detail-top{display:flex;justify-content:space-between;gap:10px}.detail-title{font-weight:900;font-size:16px;line-height:1.35}
 .detail-meta{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.6}.close{border:0;background:#eef0f3;border-radius:50%;width:32px;height:32px;font-weight:900;flex:0 0 auto}
 .detail-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.primary,.secondary{border-radius:10px;padding:11px 8px;font-weight:800}
 .primary{border:1px solid var(--accent);background:var(--accent);color:#fff}.secondary{border:1px solid var(--line);background:#fff}
@@ -126,15 +126,16 @@ details.test summary{font-weight:800;cursor:pointer}
 .cover-note{font-size:11px;color:var(--muted);margin-top:4px}
 .detail-actions-three{grid-template-columns:1fr 1fr 1fr}
 .action-link{display:flex;align-items:center;justify-content:center;border-radius:10px;padding:11px 8px;font-weight:800;text-decoration:none}
-.product-action{border:1px solid var(--accent);background:#fff;color:var(--accent)}
-.product-action.disabled{pointer-events:none;opacity:.45}
+.review-action{border:1px solid var(--accent);background:#fff;color:var(--accent);border-radius:10px;padding:11px 8px;font-weight:800}
+.product-primary{border:1px solid var(--accent);background:var(--accent);color:#fff}
+.product-primary.disabled{pointer-events:none;opacity:.45}
 .image-viewer{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;padding:48px 16px 20px}
 .image-viewer.show{display:flex}
 .image-viewer-img{max-width:96vw;max-height:88vh;object-fit:contain}
 .image-viewer-close{position:absolute;top:12px;right:12px;width:40px;height:40px;border:0;border-radius:50%;font-size:24px;font-weight:900;background:#fff;color:#111}
 @media (max-width:380px){
-  .detail-actions-three{grid-template-columns:1fr 1fr}
-  .product-action{grid-column:1 / -1}
+  .detail-actions-three{grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .detail-actions-three .action-link,.detail-actions-three button{padding-left:5px;padding-right:5px;font-size:13px}
 }
 
 
@@ -502,7 +503,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.34 TEST</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.37</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -582,8 +583,8 @@ body.detail-open .app{
   </div>
 
   <div class="detail-actions detail-actions-three">
-    <a id="productBtn" class="action-link product-action" href="#" target="_blank" rel="noopener">商品ページ</a>
-    <button id="reviewBtn" class="primary">レビューする</button>
+    <button id="reviewBtn" class="review-action">レビューする</button>
+    <a id="productBtn" class="action-link product-primary" href="#" target="_blank" rel="noopener">作品をよむ</a>
     <button id="closeBtn2" class="secondary">閉じる</button>
   </div>
 </div>
@@ -637,6 +638,60 @@ const norm=s=>kataToHira(String(s||"").trim()).toLowerCase();
 
 let builtIn, works=[], authors=[], worksByAuthor=new Map(), authorsByKana=new Map();
 let purchaseShown=0, lastPerf="", appRatings={}, currentDetailWork=null, currentAuthorForWorks=null;
+
+// v0.37: refresh後も「五十音 / 購入順」とスクロール位置をできるだけ維持する
+const VIEW_STATE_KEY="myLifeViewStateV1";
+let restoringViewState=false;
+let viewSaveTimer=null;
+function currentViewMode(){
+  return document.getElementById("tabPurchase")?.classList.contains("active") ? "purchase" : "kana";
+}
+function saveViewState(){
+  if(restoringViewState)return;
+  try{
+    sessionStorage.setItem(VIEW_STATE_KEY,JSON.stringify({
+      mode:currentViewMode(),
+      scrollY:Math.max(0,Math.round(window.scrollY||0)),
+      purchaseShown:Math.max(60,purchaseShown||60),
+      savedAt:Date.now()
+    }));
+  }catch(e){}
+}
+function queueSaveViewState(){
+  clearTimeout(viewSaveTimer);
+  viewSaveTimer=setTimeout(saveViewState,90);
+}
+function readViewState(){
+  try{return JSON.parse(sessionStorage.getItem(VIEW_STATE_KEY)||"null");}catch(e){return null;}
+}
+function setMainMode(mode){
+  const tabKana=document.getElementById("tabKana"), tabPurchase=document.getElementById("tabPurchase");
+  const kana=document.getElementById("kanaSection"), purchase=document.getElementById("purchaseSection");
+  const isPurchase=mode==="purchase";
+  tabKana.classList.toggle("active",!isPurchase);
+  tabPurchase.classList.toggle("active",isPurchase);
+  kana.classList.toggle("hidden",isPurchase);
+  purchase.classList.toggle("hidden",!isPurchase);
+}
+function restoreViewState(){
+  const st=readViewState();
+  if(!st)return;
+  restoringViewState=true;
+  if(st.mode==="purchase"){
+    setMainMode("purchase");
+    const targetShown=Math.min(works.length,Math.max(60,Number(st.purchaseShown)||60));
+    while(purchaseShown<targetShown) renderPurchaseMore();
+  }else{
+    setMainMode("kana");
+  }
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    window.scrollTo({top:Math.max(0,Number(st.scrollY)||0),left:0,behavior:"auto"});
+    restoringViewState=false;
+  }));
+}
+window.addEventListener("scroll",queueSaveViewState,{passive:true});
+window.addEventListener("pagehide",saveViewState);
+window.addEventListener("beforeunload",saveViewState);
 let currentQuickStar=false;
 
 const DB_NAME="my-life-pwa";
@@ -841,6 +896,7 @@ function loadData(newWorks,newAuthors,label,parseMs=0){
   renderPurchaseReset();
   clearNavigator();
   closeDetail();
+  restoreViewState();
   const t2=performance.now();
   setPerf(`${label}`,parseMs,t1-t0,t2-t1);
 
@@ -1126,6 +1182,7 @@ function renderPurchaseMore(){
   document.getElementById("purchaseCount").textContent=`${works.length}作品`;
   const more=document.getElementById("purchaseMore");more.classList.toggle("hidden",purchaseShown>=sorted.length);
   setActionPerf(`購入順+${next.length}件`,performance.now()-t0);
+  queueSaveViewState();
 }
 document.getElementById("purchaseMore").onclick=renderPurchaseMore;
 
@@ -1212,11 +1269,64 @@ function updateDetailSpace(){
 }
 function closeDetail(){
   closeReviewWindow();
-  document.getElementById("detail").classList.remove("show");
+  const detail=document.getElementById("detail");
+  detail.classList.remove("show","swipe-dragging","swipe-settling");
+  detail.style.transform="";
+  detail.style.boxShadow="";
   document.body.classList.remove("detail-open");
   document.documentElement.style.setProperty("--detail-space","0px");
   currentDetailWork=null;
 }
+
+// v0.37: 横スワイプは「少し動かしただけ」では閉じない。
+// 指に少し抵抗してついてきて、少し持ち上がり、十分引っ張った時だけ左右へ退場する。
+(function setupDetailSwipe(){
+  const detail=document.getElementById("detail");
+  let sx=0,sy=0,dx=0,dy=0,tracking=false,horizontal=false;
+  const interactive='a,button,input,textarea,select,label';
+  detail.addEventListener("touchstart",e=>{
+    if(!detail.classList.contains("show") || e.touches.length!==1)return;
+    // ボタン上から始めた操作は誤操作防止のためスワイプ開始しない
+    if(e.target.closest(interactive))return;
+    const t=e.touches[0];sx=t.clientX;sy=t.clientY;dx=dy=0;tracking=true;horizontal=false;
+    detail.classList.remove("swipe-settling");
+  },{passive:true});
+  detail.addEventListener("touchmove",e=>{
+    if(!tracking || e.touches.length!==1)return;
+    const t=e.touches[0];dx=t.clientX-sx;dy=t.clientY-sy;
+    if(!horizontal){
+      if(Math.abs(dx)<8 && Math.abs(dy)<8)return;
+      if(Math.abs(dy)>=Math.abs(dx)){tracking=false;return;}
+      horizontal=true;detail.classList.add("swipe-dragging");
+    }
+    if(horizontal){
+      e.preventDefault();
+      const resisted=dx*0.52;
+      const lift=Math.min(9,Math.abs(dx)*0.035);
+      const scale=1+Math.min(.008,Math.abs(dx)/25000);
+      detail.style.transform=`translateX(calc(-50% + ${resisted}px)) translateY(${-lift}px) scale(${scale})`;
+    }
+  },{passive:false});
+  function finishSwipe(){
+    if(!tracking && !horizontal)return;
+    const wasHorizontal=horizontal;tracking=false;horizontal=false;
+    if(!wasHorizontal)return;
+    const threshold=Math.max(120,detail.getBoundingClientRect().width*.30);
+    detail.classList.remove("swipe-dragging");
+    detail.classList.add("swipe-settling");
+    if(Math.abs(dx)>=threshold){
+      const dir=dx<0?-1:1;
+      const travel=window.innerWidth*dir;
+      detail.style.transform=`translateX(calc(-50% + ${travel}px)) translateY(-8px) scale(1.006)`;
+      setTimeout(closeDetail,230);
+    }else{
+      detail.style.transform="translateX(-50%)";
+      setTimeout(()=>{detail.classList.remove("swipe-settling");detail.style.transform="";},230);
+    }
+  }
+  detail.addEventListener("touchend",finishSwipe,{passive:true});
+  detail.addEventListener("touchcancel",finishSwipe,{passive:true});
+})();
 window.addEventListener("resize",()=>{ if(document.body.classList.contains("detail-open")) updateDetailSpace(); });
 
 let reviewTargetWork=null;
@@ -1433,8 +1543,8 @@ document.getElementById("imageViewer").onclick=e=>{
 };
 
 const tabKana=document.getElementById("tabKana"),tabPurchase=document.getElementById("tabPurchase");
-tabKana.onclick=()=>{tabKana.classList.add("active");tabPurchase.classList.remove("active");document.getElementById("kanaSection").classList.remove("hidden");document.getElementById("purchaseSection").classList.add("hidden")};
-tabPurchase.onclick=()=>{tabPurchase.classList.add("active");tabKana.classList.remove("active");document.getElementById("purchaseSection").classList.remove("hidden");document.getElementById("kanaSection").classList.add("hidden")};
+tabKana.onclick=()=>{setMainMode("kana");queueSaveViewState();};
+tabPurchase.onclick=()=>{setMainMode("purchase");queueSaveViewState();};
 
 let searchTimer;
 document.getElementById("searchInput").addEventListener("input",e=>{
