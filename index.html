@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.40 評価比較</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.41 評価診断</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -520,10 +520,12 @@ body.detail-open .app{
     <button id="oneDriveTestBtn" type="button">Microsoftに接続</button>
     <button id="ratingsBackupBtn" type="button" disabled>評価をOneDriveへ退避</button>
     <button id="ratingsCompareBtn" type="button" disabled>PC・タブレット評価を比較</button>
+    <button id="ratingsDiagnoseBtn" type="button" disabled>評価4303件の正体を診断</button>
   </div>
   <div id="oneDriveStatus" class="test-note">OneDrive：未接続</div>
   <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
   <div id="ratingsCompareStatus" class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
+  <div id="ratingsDiagnoseStatus" class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
@@ -1698,7 +1700,7 @@ async function initOneDriveTest(){
     mylifeMsal.setActiveAccount(account);
     btn.textContent="OneDrive接続を確認";
     setOneDriveStatus("Microsoftサインイン済み。接続確認できます。");
-    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false;
+    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false;
   }
 
   btn.addEventListener("click",async()=>{
@@ -1728,7 +1730,7 @@ async function initOneDriveTest(){
       const folder=await r.json();
       btn.textContent="接続成功 ✓";
       setOneDriveStatus("接続成功。専用フォルダ「"+(folder.name||"MY LIFE")+"」を確認しました。蔵書データは変更していません。");
-      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false;
+      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false;
     }catch(err){
       console.error("OneDrive connection test failed",err);
       setOneDriveStatus("接続失敗。画面を閉じず、この表示を教えてください。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
@@ -1888,6 +1890,63 @@ async function compareRatingBackups(){
 }
 const ratingsCompareBtn=document.getElementById("ratingsCompareBtn");
 if(ratingsCompareBtn) ratingsCompareBtn.addEventListener("click",compareRatingBackups);
+
+
+// --- Diagnose what the 4303 rating records actually are (v0.41) ---
+function setRatingsDiagnoseStatus(message){
+  const el=document.getElementById("ratingsDiagnoseStatus");
+  if(el) el.textContent="評価診断："+message;
+}
+function countRatingSources(ratings){
+  const c={total:0, app:0, legacy_app:0, excel_import:0, other:0, appWithUpdatedAt:0, appScore:0, appStar:0};
+  for(const v of Object.values(ratings||{})){
+    if(!v || typeof v!=="object") continue;
+    c.total++;
+    const s=String(v.source||"");
+    if(s==="app") c.app++;
+    else if(s==="legacy_app") c.legacy_app++;
+    else if(s==="excel_import") c.excel_import++;
+    else c.other++;
+    if(s==="app" || s==="legacy_app"){
+      if(v.updated_at) c.appWithUpdatedAt++;
+      if(v.score!==undefined && v.score!==null && String(v.score).trim()!=="") c.appScore++;
+      if(v.star===true) c.appStar++;
+    }
+  }
+  return c;
+}
+async function diagnoseRatingBackups(){
+  const btn=document.getElementById("ratingsDiagnoseBtn");
+  if(!btn)return;
+  btn.disabled=true;
+  try{
+    setRatingsDiagnoseStatus("OneDriveの端末別バックアップを読み取り中…");
+    const token=await acquireMyLifeGraphToken();
+    const list=await graphJson("https://graph.microsoft.com/v1.0/me/drive/special/approot/children?$select=id,name,lastModifiedDateTime,file&$top=200",token);
+    const files=(list.value||[]).filter(x=>/^ratings_backup_.+\.json$/i.test(x.name||"") && x.file);
+    const payloads=[];
+    for(const f of files){
+      const data=await graphJson("https://graph.microsoft.com/v1.0/me/drive/items/"+encodeURIComponent(f.id)+"/content",token);
+      if(data?.format==="MY_LIFE_rating_backup_v1") payloads.push({file:f,data});
+    }
+    let pc=payloads.find(x=>deviceLabel(x.data)==="PC");
+    let mobile=payloads.find(x=>deviceLabel(x.data)==="タブレット/モバイル");
+    if(!pc || !mobile) throw new Error("PCとタブレットのバックアップを両方確認できません");
+    const pcC=countRatingSources(pc.data.ratings);
+    const tbC=countRatingSources(mobile.data.ratings);
+    const fmt=(label,c)=>`${label}: 全${c.total}｜アプリ入力 ${c.app}｜旧アプリ ${c.legacy_app}｜Excel初期値 ${c.excel_import}｜その他 ${c.other}｜更新日時あり ${c.appWithUpdatedAt}｜抜き! ${c.appStar}`;
+    setRatingsDiagnoseStatus("完了 ✓ データ変更なし｜"+fmt("PC",pcC)+" ／ "+fmt("タブレット",tbC));
+    btn.textContent="評価診断済み ✓";
+  }catch(err){
+    console.error("Rating diagnose failed",err);
+    setRatingsDiagnoseStatus("失敗。"+(err?.message||String(err)).slice(0,240));
+  }finally{
+    btn.disabled=false;
+  }
+}
+const ratingsDiagnoseBtn=document.getElementById("ratingsDiagnoseBtn");
+if(ratingsDiagnoseBtn) ratingsDiagnoseBtn.addEventListener("click",diagnoseRatingBackups);
+
 
 initialLoad().catch(err=>{console.error(err);alert("初期データの読み込みに失敗しました。");});
 </script>
