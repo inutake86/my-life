@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44.1 評価マスター認証修正</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44.2 評価差分マスター</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -2055,37 +2055,21 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   });
 }
 
-// --- Create authoritative OneDrive rating master from all device backups (v0.44) ---
+// --- Create OneDrive rating delta master from actual app edits only (v0.44.2) ---
 function setRatingsMasterStatus(message){
   const el=document.getElementById("ratingsMasterStatus");
   if(el) el.textContent="評価マスター："+message;
 }
-function masterRatingPriority(rec){
+function isRealAppRating(rec){
   const src=String(rec?.source||"");
-  if(src==="app") return 30;
-  if(src==="legacy_app") return 20;
-  if(src==="excel_import") return 10;
-  return 0;
+  return src==="app" || src==="legacy_app";
 }
 function masterRatingTime(rec){
   const t=Date.parse(rec?.updated_at||"");
   return Number.isFinite(t)?t:0;
 }
-function chooseMasterRating(a,b){
-  if(!a) return b;
-  if(!b) return a;
-  const pa=masterRatingPriority(a), pb=masterRatingPriority(b);
-  if(pa!==pb) return pa>pb?a:b;
-  const ta=masterRatingTime(a), tb=masterRatingTime(b);
-  if(ta!==tb) return ta>tb?a:b;
-  // Same priority and same timestamp: keep identical content; otherwise mark conflict upstream.
-  return a;
-}
-function sameMasterRating(a,b){
-  return String(a?.score??"")===String(b?.score??"")
-    && !!a?.star===!!b?.star
-    && String(a?.source??"")===String(b?.source??"")
-    && String(a?.updated_at??"")===String(b?.updated_at??"");
+function sameRatingValue(a,b){
+  return String(a?.score??"")===String(b?.score??"") && !!a?.star===!!b?.star;
 }
 async function createRatingsMasterFromBackups(){
   const btn=document.getElementById("ratingsMasterCreateBtn");
@@ -2098,68 +2082,69 @@ async function createRatingsMasterFromBackups(){
     const files=(list.value||[]).filter(x=>/^ratings_backup_.+\.json$/i.test(x.name||"") && x.file);
     if(files.length<1) throw new Error("評価バックアップが見つかりません");
 
-    const backups=[];
+    const merged={};
+    const sourceBackups=[];
+    const unresolved=[];
+
     for(const f of files){
       const data=await graphJson("https://graph.microsoft.com/v1.0/me/drive/items/"+encodeURIComponent(f.id)+"/content",token);
-      if(data?.format==="MY_LIFE_rating_backup_v1" && data?.ratings){
-        backups.push({file:f,data});
-      }
-    }
-    if(backups.length<1) throw new Error("有効な評価バックアップがありません");
+      if(data?.format!=="MY_LIFE_rating_backup_v1" || !data?.ratings) continue;
+      sourceBackups.push({
+        name:f.name,
+        lastModifiedDateTime:f.lastModifiedDateTime||null,
+        device_id:data.device_id||data.device?.id||null,
+        exported_at:data.exported_at||null
+      });
 
-    const merged={};
-    const conflicts=[];
-    for(const b of backups){
-      const local={};
-      for(const [rawKey,rec] of Object.entries(b.data.ratings||{})){
+      // Important: Excel-imported baseline values are deliberately excluded.
+      // This master contains only ratings actually changed in the app.
+      for(const [rawKey,rec] of Object.entries(data.ratings||{})){
+        if(!isRealAppRating(rec)) continue;
         const key=canonicalWorkKey(rawKey);
-        if(local[key]){
-          local[key]=chooseMasterRating(local[key],rec);
-        }else{
-          local[key]=rec;
-        }
-      }
-      for(const [key,rec] of Object.entries(local)){
+        const candidate={
+          score: rec?.score==null ? null : String(rec.score),
+          star: !!rec?.star,
+          source: String(rec?.source||"app"),
+          updated_at: rec?.updated_at||null
+        };
         const old=merged[key];
-        if(old){
-          const po=masterRatingPriority(old), pn=masterRatingPriority(rec);
-          const to=masterRatingTime(old), tn=masterRatingTime(rec);
-          if(po===pn && to===tn && !sameMasterRating(old,rec)){
-            conflicts.push(key);
-            continue;
-          }
+        if(!old){
+          merged[key]=candidate;
+          continue;
         }
-        merged[key]=chooseMasterRating(old,rec);
+
+        const to=masterRatingTime(old), tn=masterRatingTime(candidate);
+        if(to && tn && to!==tn){
+          if(tn>to) merged[key]=candidate;
+          continue;
+        }
+        if(sameRatingValue(old,candidate)){
+          if(tn>to) merged[key]=candidate;
+          continue;
+        }
+        // Different real app ratings with no usable timestamp ordering need human review.
+        unresolved.push(key);
       }
     }
 
-    if(conflicts.length){
-      throw new Error("自動判定できない競合が"+new Set(conflicts).size+"件あります。マスターは作成していません");
+    const conflictIds=[...new Set(unresolved)];
+    if(conflictIds.length){
+      throw new Error("実際のアプリ評価同士で自動判定できない競合が"+conflictIds.length+"件あります。マスターは作成していません");
     }
 
-    const sourceCounts={};
-    for(const rec of Object.values(merged)){
-      const src=String(rec?.source||"unknown");
-      sourceCounts[src]=(sourceCounts[src]||0)+1;
-    }
     const payload={
-      format:"MY_LIFE_ratings_master_v1",
+      format:"MY_LIFE_ratings_master_v2",
+      master_type:"app_rating_delta",
       created_at:new Date().toISOString(),
-      source_backup_count:backups.length,
-      source_backups:backups.map(x=>({
-        name:x.file.name,
-        lastModifiedDateTime:x.file.lastModifiedDateTime||null,
-        device_id:x.data.device_id||null,
-        exported_at:x.data.exported_at||null
-      })),
-      merge_rule:"F###### IDs uppercase; app > legacy_app > excel_import; same priority uses newest updated_at",
+      source_backup_count:sourceBackups.length,
+      source_backups:sourceBackups,
+      rule:"excel_import is excluded; app/legacy_app only; same work uses newest valid updated_at",
       count:Object.keys(merged).length,
-      app_edited_count:(sourceCounts.app||0)+(sourceCounts.legacy_app||0),
-      source_counts:sourceCounts,
+      app_edited_count:Object.keys(merged).length,
       ratings:merged
     };
 
-    setRatingsMasterStatus("統合結果をOneDriveへ保存中…");
+    setRatingsMasterStatus("実評価"+payload.count+"件をOneDriveへ保存中…");
     const filename="MY_LIFE_ratings_master.json";
     const r=await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/"+encodeURIComponent(filename)+":/content",{
       method:"PUT",
@@ -2170,7 +2155,7 @@ async function createRatingsMasterFromBackups(){
       const detail=await r.text();
       throw new Error("Graph "+r.status+" "+detail.slice(0,240));
     }
-    setRatingsMasterStatus("作成成功 ✓  "+payload.count+"作品／実評価"+payload.app_edited_count+"件／バックアップ"+backups.length+"本。端末別バックアップは残しています");
+    setRatingsMasterStatus("作成成功 ✓ 実評価"+payload.count+"件／バックアップ"+sourceBackups.length+"本。Excel由来は除外、端末別バックアップは保存したままです");
     btn.textContent="評価マスター作成済み ✓";
   }catch(err){
     console.error("Rating master creation failed",err);
