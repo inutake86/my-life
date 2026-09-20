@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.41 評価診断</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.42 バックアップ確認</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -521,11 +521,13 @@ body.detail-open .app{
     <button id="ratingsBackupBtn" type="button" disabled>評価をOneDriveへ退避</button>
     <button id="ratingsCompareBtn" type="button" disabled>PC・タブレット評価を比較</button>
     <button id="ratingsDiagnoseBtn" type="button" disabled>評価4303件の正体を診断</button>
+    <button id="ratingsBackupListBtn" type="button" disabled>バックアップ実体を確認</button>
   </div>
   <div id="oneDriveStatus" class="test-note">OneDrive：未接続</div>
   <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
   <div id="ratingsCompareStatus" class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
   <div id="ratingsDiagnoseStatus" class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
+  <div id="ratingsBackupListStatus" class="test-note">バックアップ実体：未確認（OneDrive内を読むだけです）</div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
@@ -1700,7 +1702,7 @@ async function initOneDriveTest(){
     mylifeMsal.setActiveAccount(account);
     btn.textContent="OneDrive接続を確認";
     setOneDriveStatus("Microsoftサインイン済み。接続確認できます。");
-    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false;
+    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false;
   }
 
   btn.addEventListener("click",async()=>{
@@ -1730,7 +1732,7 @@ async function initOneDriveTest(){
       const folder=await r.json();
       btn.textContent="接続成功 ✓";
       setOneDriveStatus("接続成功。専用フォルダ「"+(folder.name||"MY LIFE")+"」を確認しました。蔵書データは変更していません。");
-      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false;
+      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false;
     }catch(err){
       console.error("OneDrive connection test failed",err);
       setOneDriveStatus("接続失敗。画面を閉じず、この表示を教えてください。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
@@ -1946,6 +1948,56 @@ async function diagnoseRatingBackups(){
 }
 const ratingsDiagnoseBtn=document.getElementById("ratingsDiagnoseBtn");
 if(ratingsDiagnoseBtn) ratingsDiagnoseBtn.addEventListener("click",diagnoseRatingBackups);
+
+
+
+// --- Inspect the actual OneDrive backup files without guessing device type (v0.42) ---
+function setRatingsBackupListStatus(message){
+  const el=document.getElementById("ratingsBackupListStatus");
+  if(el) el.textContent="バックアップ実体："+message;
+}
+async function inspectRatingBackupFiles(){
+  const btn=document.getElementById("ratingsBackupListBtn");
+  if(!btn)return;
+  btn.disabled=true;
+  try{
+    setRatingsBackupListStatus("OneDriveのMY LIFE専用フォルダを確認中…");
+    const token=await acquireMyLifeGraphToken();
+    const list=await graphJson("https://graph.microsoft.com/v1.0/me/drive/special/approot/children?$select=id,name,size,createdDateTime,lastModifiedDateTime,file&$top=200",token);
+    const files=(list.value||[]).filter(x=>/^ratings_backup_.+\.json$/i.test(x.name||"") && x.file);
+    if(!files.length){
+      setRatingsBackupListStatus("評価バックアップJSONは0個でした。");
+      return;
+    }
+    const rows=[];
+    for(const f of files){
+      let detail="中身未確認";
+      try{
+        const data=await graphJson("https://graph.microsoft.com/v1.0/me/drive/items/"+encodeURIComponent(f.id)+"/content",token);
+        const ratings=(data && data.ratings && typeof data.ratings==="object") ? data.ratings : {};
+        const c=countRatingSources(ratings);
+        const meta=[];
+        if(data?.device_label) meta.push("device_label="+data.device_label);
+        if(data?.device) meta.push("device="+data.device);
+        if(data?.user_agent) meta.push("UA="+String(data.user_agent).slice(0,45));
+        if(data?.exported_at) meta.push("保存="+data.exported_at);
+        detail=`件数=${c.total}, app=${c.app}, legacy=${c.legacy_app}, excel=${c.excel_import}, other=${c.other}`+(meta.length?" ["+meta.join(" / ")+"]":"");
+      }catch(e){
+        detail="中身の読取失敗: "+(e?.message||String(e)).slice(0,80);
+      }
+      rows.push(`${f.name}｜${detail}`);
+    }
+    setRatingsBackupListStatus(`確認成功 ✓ ${files.length}個｜`+rows.join(" ／ "));
+    btn.textContent="バックアップ実体確認済み ✓";
+  }catch(err){
+    console.error("Backup file inspection failed",err);
+    setRatingsBackupListStatus("失敗。"+(err?.message||String(err)).slice(0,240));
+  }finally{
+    btn.disabled=false;
+  }
+}
+const ratingsBackupListBtn=document.getElementById("ratingsBackupListBtn");
+if(ratingsBackupListBtn) ratingsBackupListBtn.addEventListener("click",inspectRatingBackupFiles);
 
 
 initialLoad().catch(err=>{console.error(err);alert("初期データの読み込みに失敗しました。");});
