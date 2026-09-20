@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.45.2 評価マスター反映安定版</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.46 データ管理整理</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -516,20 +516,20 @@ body.detail-open .app{
   <summary>データ管理</summary>
   <div class="test-grid">
     <label class="file-label">CSVを更新<input id="csvFile" type="file" accept=".csv,text/csv" hidden></label>
-    <button id="clearSavedData">蔵書データを消去</button>
-    <button id="oneDriveTestBtn" type="button">Microsoftに接続</button>
-    <button id="ratingsBackupBtn" type="button" disabled>評価をOneDriveへ退避</button>
-    <button id="ratingsCompareBtn" type="button" disabled>PC・タブレット評価を比較</button>
-    <button id="ratingsDiagnoseBtn" type="button" disabled>評価4303件の正体を診断</button>
-    <button id="ratingsBackupListBtn" type="button" disabled>バックアップ実体を確認</button>
-    <button id="ratingsMasterCreateBtn" type="button" disabled>3端末から評価マスターを作成</button>
+    <button id="clearSavedData" hidden>蔵書データを消去</button>
+    <button id="oneDriveTestBtn" hidden type="button">Microsoftに接続</button>
+    <button id="ratingsBackupBtn" hidden type="button" disabled>評価をOneDriveへ退避</button>
+    <button id="ratingsCompareBtn" hidden type="button" disabled>PC・タブレット評価を比較</button>
+    <button id="ratingsDiagnoseBtn" hidden type="button" disabled>評価4303件の正体を診断</button>
+    <button id="ratingsBackupListBtn" hidden type="button" disabled>バックアップ実体を確認</button>
+    <button id="ratingsMasterCreateBtn" hidden type="button" disabled>3端末から評価マスターを作成</button>
     <button id="ratingsMasterLoadBtn" type="button" disabled>評価マスターをこの端末へ反映</button>
   </div>
-  <div id="oneDriveStatus" class="test-note">OneDrive：未接続</div>
-  <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
-  <div id="ratingsCompareStatus" class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
-  <div id="ratingsDiagnoseStatus" class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
-  <div id="ratingsBackupListStatus" class="test-note">バックアップ実体：未確認（OneDrive内を読むだけです）</div>
+  <div id="oneDriveStatus" hidden class="test-note">OneDrive：未接続</div>
+  <div id="ratingsBackupStatus" hidden class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
+  <div id="ratingsCompareStatus" hidden class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
+  <div id="ratingsDiagnoseStatus" hidden class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
+  <div id="ratingsBackupListStatus" hidden class="test-note">バックアップ実体：未確認（OneDrive内を読むだけです）</div>
   <div id="ratingsMasterStatus" class="test-note">評価マスター：未作成（端末別バックアップは消しません）</div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
