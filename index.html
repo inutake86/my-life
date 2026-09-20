@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.42 バックアップ確認</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.43 ID正規化</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -753,7 +753,12 @@ async function dbDelete(key){
   });
 }
 
-function workKey(w){ return String(w.work_id||w.fanza_id||""); }
+function canonicalWorkKey(value){
+  const raw=String(value||"").trim();
+  if(/^f\d{6}$/i.test(raw)) return raw.toUpperCase();
+  return raw;
+}
+function workKey(w){ return canonicalWorkKey(w.work_id||w.fanza_id||""); }
 
 function formatScore(value){
   const raw=String(value??"").trim();
@@ -804,13 +809,49 @@ function excelSelfScoreOf(w){
   return "";
 }
 
+function ratingPriority(rec){
+  const src=String(rec?.source||"");
+  if(src==="app") return 30;
+  if(src==="legacy_app") return 20;
+  if(src==="excel_import") return 10;
+  return 0;
+}
+function chooseRatingRecord(a,b){
+  if(!a)return b;
+  if(!b)return a;
+  const pa=ratingPriority(a), pb=ratingPriority(b);
+  if(pa!==pb)return pa>pb?a:b;
+  const ta=Date.parse(a.updated_at||"")||0;
+  const tb=Date.parse(b.updated_at||"")||0;
+  if(ta!==tb)return ta>tb?a:b;
+  return b;
+}
+async function normalizeStoredRatingKeys(){
+  const original=(await dbGet(APP_RATINGS_KEY))||{};
+  const normalized={};
+  let changed=false;
+  for(const [rawKey,rec] of Object.entries(original)){
+    const key=canonicalWorkKey(rawKey);
+    if(key!==rawKey) changed=true;
+    if(normalized[key]){
+      normalized[key]=chooseRatingRecord(normalized[key],rec);
+      changed=true;
+    }else{
+      normalized[key]=rec;
+    }
+  }
+  if(changed) await dbPut(APP_RATINGS_KEY,normalized);
+  return normalized;
+}
+
 async function loadAppRatings(){
-  appRatings=(await dbGet(APP_RATINGS_KEY))||{};
+  appRatings=await normalizeStoredRatingKeys();
 
   // v0.30で簡易点数を試していた場合も無駄にしない。
   const legacy=(await dbGet(LEGACY_QUICK_KEY))||{};
   let dirty=false;
-  for(const [key,val] of Object.entries(legacy)){
+  for(const [rawKey,val] of Object.entries(legacy)){
+    const key=canonicalWorkKey(rawKey);
     if(!appRatings[key]){
       appRatings[key]={
         score:formatScore(val),
@@ -1604,7 +1645,7 @@ document.getElementById("csvFile").addEventListener("change",async e=>{
   };
   if(ix.title<0||ix.author<0){alert("最低限「タイトル」と「作者」列が必要です。");return;}
   const ws=rows.slice(1).filter(r=>r.some(Boolean)).map((r,n)=>({
-    work_id:ix.id>=0?r[ix.id]:(ix.fanza>=0?r[ix.fanza]:`import_${n+1}`),
+    work_id:canonicalWorkKey(ix.id>=0?r[ix.id]:(ix.fanza>=0?r[ix.fanza]:`import_${n+1}`)),
     fanza_id:ix.fanza>=0?r[ix.fanza]:"",
     title:r[ix.title]||"",
     author:r[ix.author]||"作者不明",
