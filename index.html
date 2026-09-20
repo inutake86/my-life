@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.39 評価バックアップ</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.40 評価比較</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -519,9 +519,11 @@ body.detail-open .app{
     <button id="clearSavedData">蔵書データを消去</button>
     <button id="oneDriveTestBtn" type="button">Microsoftに接続</button>
     <button id="ratingsBackupBtn" type="button" disabled>評価をOneDriveへ退避</button>
+    <button id="ratingsCompareBtn" type="button" disabled>PC・タブレット評価を比較</button>
   </div>
   <div id="oneDriveStatus" class="test-note">OneDrive：未接続</div>
   <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
+  <div id="ratingsCompareStatus" class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
@@ -1696,7 +1698,7 @@ async function initOneDriveTest(){
     mylifeMsal.setActiveAccount(account);
     btn.textContent="OneDrive接続を確認";
     setOneDriveStatus("Microsoftサインイン済み。接続確認できます。");
-    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false;
+    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false;
   }
 
   btn.addEventListener("click",async()=>{
@@ -1726,7 +1728,7 @@ async function initOneDriveTest(){
       const folder=await r.json();
       btn.textContent="接続成功 ✓";
       setOneDriveStatus("接続成功。専用フォルダ「"+(folder.name||"MY LIFE")+"」を確認しました。蔵書データは変更していません。");
-      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false;
+      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false;
     }catch(err){
       console.error("OneDrive connection test failed",err);
       setOneDriveStatus("接続失敗。画面を閉じず、この表示を教えてください。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
@@ -1810,6 +1812,82 @@ async function backupRatingsToOneDrive(){
 }
 const ratingsBackupBtn=document.getElementById("ratingsBackupBtn");
 if(ratingsBackupBtn) ratingsBackupBtn.addEventListener("click",backupRatingsToOneDrive);
+
+
+// --- Compare per-device OneDrive rating backups without modifying them (v0.40) ---
+function setRatingsCompareStatus(message){
+  const el=document.getElementById("ratingsCompareStatus");
+  if(el) el.textContent="評価比較："+message;
+}
+function ratingHasUserValue(v){
+  if(!v || typeof v!=="object") return false;
+  return v.score!==undefined && v.score!==null && String(v.score).trim()!=="" ||
+         v.star===true || v.comment!==undefined && String(v.comment||"").trim()!=="" ||
+         v.source==="app" || v.source==="legacy_app";
+}
+function normalizedRating(v){
+  if(!v || typeof v!=="object") return null;
+  const o={};
+  for(const k of ["score","star","comment","route","resultPath","display_score","internal_score"]){
+    if(v[k]!==undefined) o[k]=v[k];
+  }
+  return JSON.stringify(o);
+}
+function deviceLabel(payload){
+  const ua=String(payload?.user_agent||"");
+  if(/Android|iPad|Tablet/i.test(ua)) return "タブレット/モバイル";
+  if(/Windows/i.test(ua)) return "PC";
+  return "端末";
+}
+async function graphJson(url,token){
+  const r=await fetch(url,{headers:{Authorization:"Bearer "+token.accessToken}});
+  if(!r.ok) throw new Error("Graph "+r.status+" "+(await r.text()).slice(0,180));
+  return await r.json();
+}
+async function compareRatingBackups(){
+  const btn=document.getElementById("ratingsCompareBtn");
+  if(!btn) return;
+  btn.disabled=true;
+  try{
+    setRatingsCompareStatus("OneDriveの端末別バックアップを確認中…");
+    const token=await acquireMyLifeGraphToken();
+    const list=await graphJson("https://graph.microsoft.com/v1.0/me/drive/special/approot/children?$select=id,name,lastModifiedDateTime,file&$top=200",token);
+    const files=(list.value||[]).filter(x=>/^ratings_backup_.+\.json$/i.test(x.name||"") && x.file);
+    if(files.length<2) throw new Error("端末別バックアップが2個見つかりません（現在 "+files.length+"個）");
+    files.sort((a,b)=>String(b.lastModifiedDateTime).localeCompare(String(a.lastModifiedDateTime)));
+    const payloads=[];
+    for(const f of files){
+      const data=await graphJson("https://graph.microsoft.com/v1.0/me/drive/items/"+encodeURIComponent(f.id)+"/content",token);
+      if(data?.format==="MY_LIFE_rating_backup_v1") payloads.push({file:f,data});
+    }
+    // Prefer one Windows backup and one mobile/tablet backup; otherwise two newest distinct devices.
+    let A=payloads.find(x=>deviceLabel(x.data)==="PC");
+    let B=payloads.find(x=>deviceLabel(x.data)==="タブレット/モバイル");
+    if(!A || !B){ A=payloads[0]; B=payloads.find(x=>x.data.device_id!==A?.data.device_id); }
+    if(!A || !B) throw new Error("比較できる異なる2端末のバックアップが見つかりません");
+    const ar=A.data.ratings||{}, br=B.data.ratings||{};
+    const ids=new Set([...Object.keys(ar),...Object.keys(br)]);
+    let same=0,aOnly=0,bOnly=0,diff=0,emptyBoth=0;
+    for(const id of ids){
+      const av=ar[id], bv=br[id];
+      const ah=ratingHasUserValue(av), bh=ratingHasUserValue(bv);
+      if(!ah && !bh){ emptyBoth++; continue; }
+      if(ah && !bh){ aOnly++; continue; }
+      if(!ah && bh){ bOnly++; continue; }
+      if(normalizedRating(av)===normalizedRating(bv)) same++; else diff++;
+    }
+    const al=deviceLabel(A.data), bl=deviceLabel(B.data);
+    setRatingsCompareStatus(
+      "完了 ✓ 統合・上書きなし｜"+al+"のみ "+aOnly+"件｜"+bl+"のみ "+bOnly+"件｜両方一致 "+same+"件｜両方あるが内容違い "+diff+"件｜未評価扱い "+emptyBoth+"件"
+    );
+    btn.textContent="評価比較済み ✓";
+  }catch(err){
+    console.error("Rating compare failed",err);
+    setRatingsCompareStatus("失敗。"+(err?.message||String(err)).slice(0,220));
+  }finally{ btn.disabled=false; }
+}
+const ratingsCompareBtn=document.getElementById("ratingsCompareBtn");
+if(ratingsCompareBtn) ratingsCompareBtn.addEventListener("click",compareRatingBackups);
 
 initialLoad().catch(err=>{console.error(err);alert("初期データの読み込みに失敗しました。");});
 </script>
