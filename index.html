@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.46 データ管理整理</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.47 評価手動同期</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -526,7 +526,7 @@ body.detail-open .app{
     <button id="ratingsMasterLoadBtn" type="button" disabled>別端末の評価データを同期</button>
   </div>
   <div id="oneDriveStatus" hidden class="test-note">OneDrive：未接続</div>
-  <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
+  <div id="ratingsBackupStatus" class="test-note">評価送信：未実行</div>
   <div id="ratingsCompareStatus" hidden class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
   <div id="ratingsDiagnoseStatus" hidden class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
   <div id="ratingsBackupListStatus" hidden class="test-note">バックアップ実体：未確認（OneDrive内を読むだけです）</div>
@@ -1823,37 +1823,92 @@ async function backupRatingsToOneDrive(){
   if(!btn)return;
   btn.disabled=true;
   try{
-    setRatingsBackupStatus("端末内の評価を読み取り中…");
-    const ratings=(await dbGet(APP_RATINGS_KEY))||{};
-    const entries=Object.entries(ratings);
-    const appEdited=entries.filter(([,v])=>v && (v.source==="app" || v.source==="legacy_app")).length;
-    const deviceId=getBackupDeviceId();
-    const payload={
-      format:"MY_LIFE_rating_backup_v1",
-      exported_at:new Date().toISOString(),
-      device_id:deviceId,
-      user_agent:navigator.userAgent,
-      rating_count:entries.length,
-      app_edited_count:appEdited,
-      ratings
-    };
+    setRatingsBackupStatus("端末内の新しい評価を確認中…");
+    const localRaw=(await dbGet(APP_RATINGS_KEY))||{};
+
+    // Canonicalize this device's real app edits only. Excel baseline never enters the shared master.
+    const localEdits={};
+    for(const [rawKey,rec] of Object.entries(localRaw)){
+      if(!rec || (rec.source!=="app" && rec.source!=="legacy_app")) continue;
+      const key=canonicalWorkKey(rawKey);
+      localEdits[key]=chooseRatingRecord(localEdits[key],rec);
+    }
+
     const token=await acquireMyLifeGraphToken();
-    const filename="ratings_backup_"+deviceId+".json";
-    setRatingsBackupStatus("OneDriveへ保存中…");
-    const r=await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/"+encodeURIComponent(filename)+":/content",{
+
+    // Read the current shared master first, so ratings created on other devices are never blindly erased.
+    let master={format:"MY_LIFE_ratings_master_v2",ratings:{}};
+    const masterUrl="https://graph.microsoft.com/v1.0/me/drive/special/approot:/MY_LIFE_ratings_master.json:/content";
+    const mr=await fetch(masterUrl,{headers:{Authorization:"Bearer "+token.accessToken}});
+    if(mr.ok){
+      const loaded=await mr.json();
+      if(loaded?.ratings && /^MY_LIFE_ratings_master_v[12]$/.test(String(loaded.format||""))) master=loaded;
+      else throw new Error("OneDriveの評価マスター形式を確認できません");
+    }else if(mr.status!==404){
+      throw new Error("評価マスター読込 Graph "+mr.status+" "+(await mr.text()).slice(0,180));
+    }
+
+    const merged={};
+    for(const [rawKey,rec] of Object.entries(master.ratings||{})){
+      const key=canonicalWorkKey(rawKey);
+      if(rec && (rec.source==="app" || rec.source==="legacy_app"))
+        merged[key]=chooseRatingRecord(merged[key],rec);
+    }
+
+    let added=0,updated=0,kept=0;
+    for(const [key,rec] of Object.entries(localEdits)){
+      const before=merged[key];
+      const chosen=chooseRatingRecord(before,rec);
+      if(!before && chosen===rec) added++;
+      else if(before && chosen===rec && JSON.stringify(before)!==JSON.stringify(rec)) updated++;
+      else kept++;
+      merged[key]=chosen;
+    }
+
+    const payload={
+      format:"MY_LIFE_ratings_master_v2",
+      updated_at:new Date().toISOString(),
+      count:Object.keys(merged).length,
+      ratings:merged
+    };
+
+    setRatingsBackupStatus("OneDriveの評価マスターを更新中…");
+    const wr=await fetch(masterUrl,{
       method:"PUT",
       headers:{Authorization:"Bearer "+token.accessToken,"Content-Type":"application/json; charset=utf-8"},
       body:JSON.stringify(payload,null,2)
     });
-    if(!r.ok){
-      const detail=await r.text();
-      throw new Error("Graph "+r.status+" "+detail.slice(0,240));
-    }
-    setRatingsBackupStatus("成功 ✓  "+entries.length+"件を端末別ファイルへ退避しました");
-    btn.textContent="評価バックアップ済み ✓";
+    if(!wr.ok) throw new Error("Graph "+wr.status+" "+(await wr.text()).slice(0,240));
+
+    // Keep the old per-device backup too, as a safety net during the provisional period.
+    const deviceId=getBackupDeviceId();
+    const backupPayload={
+      format:"MY_LIFE_rating_backup_v1",
+      exported_at:new Date().toISOString(),
+      device_id:deviceId,
+      user_agent:navigator.userAgent,
+      rating_count:Object.keys(localRaw).length,
+      app_edited_count:Object.keys(localEdits).length,
+      ratings:localRaw
+    };
+    const backupName="ratings_backup_"+deviceId+".json";
+    const br=await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/"+encodeURIComponent(backupName)+":/content",{
+      method:"PUT",
+      headers:{Authorization:"Bearer "+token.accessToken,"Content-Type":"application/json; charset=utf-8"},
+      body:JSON.stringify(backupPayload,null,2)
+    });
+    if(!br.ok) throw new Error("マスター更新済み。ただし端末別バックアップ失敗 Graph "+br.status);
+
+    setRatingsBackupStatus(
+      "送信成功 ✓ OneDriveマスター "+payload.count+"件"+
+      (added? "／新規"+added+"件":"")+
+      (updated? "／更新"+updated+"件":"")+
+      "。別端末で同期できます"
+    );
+    btn.textContent="OneDriveへ送信済み ✓";
   }catch(err){
-    console.error("Rating backup failed",err);
-    setRatingsBackupStatus("失敗。"+(err?.message||String(err)).slice(0,180));
+    console.error("Rating master send failed",err);
+    setRatingsBackupStatus("送信失敗。"+(err?.message||String(err)).slice(0,220));
   }finally{
     btn.disabled=false;
   }
