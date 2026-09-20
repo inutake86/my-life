@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44.3 評価マスター通信修正</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.45 評価マスター読込</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -523,6 +523,7 @@ body.detail-open .app{
     <button id="ratingsDiagnoseBtn" type="button" disabled>評価4303件の正体を診断</button>
     <button id="ratingsBackupListBtn" type="button" disabled>バックアップ実体を確認</button>
     <button id="ratingsMasterCreateBtn" type="button" disabled>3端末から評価マスターを作成</button>
+    <button id="ratingsMasterLoadBtn" type="button" disabled>評価マスターをこの端末へ反映</button>
   </div>
   <div id="oneDriveStatus" class="test-note">OneDrive：未接続</div>
   <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
@@ -1745,7 +1746,7 @@ async function initOneDriveTest(){
     mylifeMsal.setActiveAccount(account);
     btn.textContent="OneDrive接続を確認";
     setOneDriveStatus("Microsoftサインイン済み。接続確認できます。");
-    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false; const masterBtn=document.getElementById("ratingsMasterCreateBtn"); if(masterBtn) masterBtn.disabled=false;
+    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false; const masterBtn=document.getElementById("ratingsMasterCreateBtn"); if(masterBtn) masterBtn.disabled=false; const masterLoadBtn=document.getElementById("ratingsMasterLoadBtn"); if(masterLoadBtn) masterLoadBtn.disabled=false;
   }
 
   btn.addEventListener("click",async()=>{
@@ -1775,7 +1776,7 @@ async function initOneDriveTest(){
       const folder=await r.json();
       btn.textContent="接続成功 ✓";
       setOneDriveStatus("接続成功。専用フォルダ「"+(folder.name||"MY LIFE")+"」を確認しました。蔵書データは変更していません。");
-      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false; const masterBtn=document.getElementById("ratingsMasterCreateBtn"); if(masterBtn) masterBtn.disabled=false;
+      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false; const masterBtn=document.getElementById("ratingsMasterCreateBtn"); if(masterBtn) masterBtn.disabled=false; const masterLoadBtn=document.getElementById("ratingsMasterLoadBtn"); if(masterLoadBtn) masterLoadBtn.disabled=false;
     }catch(err){
       console.error("OneDrive connection test failed",err);
       setOneDriveStatus("接続失敗。画面を閉じず、この表示を教えてください。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
@@ -2166,6 +2167,70 @@ async function createRatingsMasterFromBackups(){
 }
 const ratingsMasterCreateBtn=document.getElementById("ratingsMasterCreateBtn");
 if(ratingsMasterCreateBtn) ratingsMasterCreateBtn.addEventListener("click",createRatingsMasterFromBackups);
+
+
+// --- Load authoritative OneDrive app-rating delta master into this device (v0.45) ---
+function chooseLocalVsMaster(localRec, masterRec){
+  if(!localRec) return masterRec;
+  if(!masterRec) return localRec;
+  const lp=ratingPriority(localRec), mp=ratingPriority(masterRec);
+  if(lp!==mp) return mp>lp?masterRec:localRec;
+  const lt=Date.parse(localRec.updated_at||"")||0;
+  const mt=Date.parse(masterRec.updated_at||"")||0;
+  if(lt!==mt) return mt>lt?masterRec:localRec;
+  // Equal timestamp/priority: master is authoritative for the shared state.
+  return masterRec;
+}
+async function loadRatingsMasterIntoDevice(){
+  const btn=document.getElementById("ratingsMasterLoadBtn");
+  if(!btn) return;
+  btn.disabled=true;
+  try{
+    setRatingsMasterStatus("OneDriveの評価マスターを読み取り中…");
+    const token=await acquireMyLifeGraphToken();
+    const master=await graphJson(
+      "https://graph.microsoft.com/v1.0/me/drive/special/approot:/MY_LIFE_ratings_master.json:/content",
+      token
+    );
+    if(!master?.ratings || !/^MY_LIFE_ratings_master_v[12]$/.test(String(master.format||""))){
+      throw new Error("有効な評価マスターではありません");
+    }
+
+    const local=(await dbGet(APP_RATINGS_KEY))||{};
+    const normalized={};
+    for(const [rawKey,rec] of Object.entries(local)){
+      const key=canonicalWorkKey(rawKey);
+      normalized[key]=chooseRatingRecord(normalized[key],rec);
+    }
+
+    let applied=0, keptNewerLocal=0;
+    for(const [rawKey,rec] of Object.entries(master.ratings||{})){
+      const key=canonicalWorkKey(rawKey);
+      const before=normalized[key];
+      const chosen=chooseLocalVsMaster(before,rec);
+      if(chosen===rec) applied++;
+      else if(before && ratingPriority(before)>=20) keptNewerLocal++;
+      normalized[key]=chosen;
+    }
+
+    await dbPut(APP_RATINGS_KEY,normalized);
+    appRatings=normalized;
+    setRatingsMasterStatus(
+      "反映成功 ✓ マスター実評価"+Object.keys(master.ratings||{}).length+
+      "件／この端末へ反映"+applied+"件"+
+      (keptNewerLocal? "／端末側の新しい評価"+keptNewerLocal+"件を保持":"")
+    );
+    btn.textContent="評価マスター反映済み ✓";
+    render();
+  }catch(err){
+    console.error("Rating master load failed",err);
+    setRatingsMasterStatus("反映失敗。"+(err?.message||String(err)).slice(0,220));
+  }finally{
+    btn.disabled=false;
+  }
+}
+const ratingsMasterLoadBtn=document.getElementById("ratingsMasterLoadBtn");
+if(ratingsMasterLoadBtn) ratingsMasterLoadBtn.addEventListener("click",loadRatingsMasterIntoDevice);
 
 </script>
 
