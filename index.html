@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.43 ID正規化</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44 評価マスター導入</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -522,12 +522,14 @@ body.detail-open .app{
     <button id="ratingsCompareBtn" type="button" disabled>PC・タブレット評価を比較</button>
     <button id="ratingsDiagnoseBtn" type="button" disabled>評価4303件の正体を診断</button>
     <button id="ratingsBackupListBtn" type="button" disabled>バックアップ実体を確認</button>
+    <button id="ratingsMasterCreateBtn" type="button" disabled>3端末から評価マスターを作成</button>
   </div>
   <div id="oneDriveStatus" class="test-note">OneDrive：未接続</div>
   <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
   <div id="ratingsCompareStatus" class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
   <div id="ratingsDiagnoseStatus" class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
   <div id="ratingsBackupListStatus" class="test-note">バックアップ実体：未確認（OneDrive内を読むだけです）</div>
+  <div id="ratingsMasterStatus" class="test-note">評価マスター：未作成（端末別バックアップは消しません）</div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
@@ -1743,7 +1745,7 @@ async function initOneDriveTest(){
     mylifeMsal.setActiveAccount(account);
     btn.textContent="OneDrive接続を確認";
     setOneDriveStatus("Microsoftサインイン済み。接続確認できます。");
-    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false;
+    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false; const masterBtn=document.getElementById("ratingsMasterCreateBtn"); if(masterBtn) masterBtn.disabled=false;
   }
 
   btn.addEventListener("click",async()=>{
@@ -1773,7 +1775,7 @@ async function initOneDriveTest(){
       const folder=await r.json();
       btn.textContent="接続成功 ✓";
       setOneDriveStatus("接続成功。専用フォルダ「"+(folder.name||"MY LIFE")+"」を確認しました。蔵書データは変更していません。");
-      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false;
+      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false; const compareBtn=document.getElementById("ratingsCompareBtn"); if(compareBtn) compareBtn.disabled=false; const diagnoseBtn=document.getElementById("ratingsDiagnoseBtn"); if(diagnoseBtn) diagnoseBtn.disabled=false; const backupListBtn=document.getElementById("ratingsBackupListBtn"); if(backupListBtn) backupListBtn.disabled=false; const masterBtn=document.getElementById("ratingsMasterCreateBtn"); if(masterBtn) masterBtn.disabled=false;
     }catch(err){
       console.error("OneDrive connection test failed",err);
       setOneDriveStatus("接続失敗。画面を閉じず、この表示を教えてください。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
@@ -2052,6 +2054,135 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     });
   });
 }
+
+// --- Create authoritative OneDrive rating master from all device backups (v0.44) ---
+function setRatingsMasterStatus(message){
+  const el=document.getElementById("ratingsMasterStatus");
+  if(el) el.textContent="評価マスター："+message;
+}
+function masterRatingPriority(rec){
+  const src=String(rec?.source||"");
+  if(src==="app") return 30;
+  if(src==="legacy_app") return 20;
+  if(src==="excel_import") return 10;
+  return 0;
+}
+function masterRatingTime(rec){
+  const t=Date.parse(rec?.updated_at||"");
+  return Number.isFinite(t)?t:0;
+}
+function chooseMasterRating(a,b){
+  if(!a) return b;
+  if(!b) return a;
+  const pa=masterRatingPriority(a), pb=masterRatingPriority(b);
+  if(pa!==pb) return pa>pb?a:b;
+  const ta=masterRatingTime(a), tb=masterRatingTime(b);
+  if(ta!==tb) return ta>tb?a:b;
+  // Same priority and same timestamp: keep identical content; otherwise mark conflict upstream.
+  return a;
+}
+function sameMasterRating(a,b){
+  return String(a?.score??"")===String(b?.score??"")
+    && !!a?.star===!!b?.star
+    && String(a?.source??"")===String(b?.source??"")
+    && String(a?.updated_at??"")===String(b?.updated_at??"");
+}
+async function createRatingsMasterFromBackups(){
+  const btn=document.getElementById("ratingsMasterCreateBtn");
+  if(!btn) return;
+  btn.disabled=true;
+  try{
+    setRatingsMasterStatus("OneDriveの端末別バックアップを読み取り中…");
+    const tokenObj=await acquireMyLifeGraphToken();
+    const token=tokenObj.accessToken;
+    const list=await graphJson("https://graph.microsoft.com/v1.0/me/drive/special/approot/children?$select=id,name,lastModifiedDateTime,file&$top=200",token);
+    const files=(list.value||[]).filter(x=>/^ratings_backup_.+\.json$/i.test(x.name||"") && x.file);
+    if(files.length<1) throw new Error("評価バックアップが見つかりません");
+
+    const backups=[];
+    for(const f of files){
+      const data=await graphJson("https://graph.microsoft.com/v1.0/me/drive/items/"+encodeURIComponent(f.id)+"/content",token);
+      if(data?.format==="MY_LIFE_rating_backup_v1" && data?.ratings){
+        backups.push({file:f,data});
+      }
+    }
+    if(backups.length<1) throw new Error("有効な評価バックアップがありません");
+
+    const merged={};
+    const conflicts=[];
+    for(const b of backups){
+      const local={};
+      for(const [rawKey,rec] of Object.entries(b.data.ratings||{})){
+        const key=canonicalWorkKey(rawKey);
+        if(local[key]){
+          local[key]=chooseMasterRating(local[key],rec);
+        }else{
+          local[key]=rec;
+        }
+      }
+      for(const [key,rec] of Object.entries(local)){
+        const old=merged[key];
+        if(old){
+          const po=masterRatingPriority(old), pn=masterRatingPriority(rec);
+          const to=masterRatingTime(old), tn=masterRatingTime(rec);
+          if(po===pn && to===tn && !sameMasterRating(old,rec)){
+            conflicts.push(key);
+            continue;
+          }
+        }
+        merged[key]=chooseMasterRating(old,rec);
+      }
+    }
+
+    if(conflicts.length){
+      throw new Error("自動判定できない競合が"+new Set(conflicts).size+"件あります。マスターは作成していません");
+    }
+
+    const sourceCounts={};
+    for(const rec of Object.values(merged)){
+      const src=String(rec?.source||"unknown");
+      sourceCounts[src]=(sourceCounts[src]||0)+1;
+    }
+    const payload={
+      format:"MY_LIFE_ratings_master_v1",
+      created_at:new Date().toISOString(),
+      source_backup_count:backups.length,
+      source_backups:backups.map(x=>({
+        name:x.file.name,
+        lastModifiedDateTime:x.file.lastModifiedDateTime||null,
+        device_id:x.data.device_id||null,
+        exported_at:x.data.exported_at||null
+      })),
+      merge_rule:"F###### IDs uppercase; app > legacy_app > excel_import; same priority uses newest updated_at",
+      count:Object.keys(merged).length,
+      app_edited_count:(sourceCounts.app||0)+(sourceCounts.legacy_app||0),
+      source_counts:sourceCounts,
+      ratings:merged
+    };
+
+    setRatingsMasterStatus("統合結果をOneDriveへ保存中…");
+    const filename="MY_LIFE_ratings_master.json";
+    const r=await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/"+encodeURIComponent(filename)+":/content",{
+      method:"PUT",
+      headers:{Authorization:"Bearer "+token,"Content-Type":"application/json; charset=utf-8"},
+      body:JSON.stringify(payload,null,2)
+    });
+    if(!r.ok){
+      const detail=await r.text();
+      throw new Error("Graph "+r.status+" "+detail.slice(0,240));
+    }
+    setRatingsMasterStatus("作成成功 ✓  "+payload.count+"作品／実評価"+payload.app_edited_count+"件／バックアップ"+backups.length+"本。端末別バックアップは残しています");
+    btn.textContent="評価マスター作成済み ✓";
+  }catch(err){
+    console.error("Rating master creation failed",err);
+    setRatingsMasterStatus("失敗。"+(err?.message||String(err)).slice(0,220));
+  }finally{
+    btn.disabled=false;
+  }
+}
+const ratingsMasterCreateBtn=document.getElementById("ratingsMasterCreateBtn");
+if(ratingsMasterCreateBtn) ratingsMasterCreateBtn.addEventListener("click",createRatingsMasterFromBackups);
+
 </script>
 
 </body>
