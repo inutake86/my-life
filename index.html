@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.38 OneDrive接続テスト</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.39 評価バックアップ</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -518,8 +518,10 @@ body.detail-open .app{
     <label class="file-label">CSVを更新<input id="csvFile" type="file" accept=".csv,text/csv" hidden></label>
     <button id="clearSavedData">蔵書データを消去</button>
     <button id="oneDriveTestBtn" type="button">Microsoftに接続</button>
+    <button id="ratingsBackupBtn" type="button" disabled>評価をOneDriveへ退避</button>
   </div>
-  <div id="oneDriveStatus" class="test-note">OneDrive：未接続（接続テスト用。蔵書データは変更しません）</div>
+  <div id="oneDriveStatus" class="test-note">OneDrive：未接続</div>
+  <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
@@ -1694,6 +1696,7 @@ async function initOneDriveTest(){
     mylifeMsal.setActiveAccount(account);
     btn.textContent="OneDrive接続を確認";
     setOneDriveStatus("Microsoftサインイン済み。接続確認できます。");
+    const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false;
   }
 
   btn.addEventListener("click",async()=>{
@@ -1723,6 +1726,7 @@ async function initOneDriveTest(){
       const folder=await r.json();
       btn.textContent="接続成功 ✓";
       setOneDriveStatus("接続成功。専用フォルダ「"+(folder.name||"MY LIFE")+"」を確認しました。蔵書データは変更していません。");
+      const backupBtn=document.getElementById("ratingsBackupBtn"); if(backupBtn) backupBtn.disabled=false;
     }catch(err){
       console.error("OneDrive connection test failed",err);
       setOneDriveStatus("接続失敗。画面を閉じず、この表示を教えてください。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
@@ -1735,6 +1739,77 @@ initOneDriveTest().catch(err=>{
   console.error("OneDrive test init failed",err);
   setOneDriveStatus("初期化に失敗しました。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
 });
+
+
+
+// --- Safe per-device rating backup to OneDrive AppFolder (v0.39) ---
+const MYLIFE_DEVICE_ID_KEY="myLifeDeviceBackupIdV1";
+function getBackupDeviceId(){
+  let id=localStorage.getItem(MYLIFE_DEVICE_ID_KEY);
+  if(!id){
+    const rand=(crypto?.randomUUID ? crypto.randomUUID() : (Date.now().toString(36)+Math.random().toString(36).slice(2)));
+    id=rand.replace(/[^a-zA-Z0-9_-]/g,"").slice(0,36);
+    localStorage.setItem(MYLIFE_DEVICE_ID_KEY,id);
+  }
+  return id;
+}
+function setRatingsBackupStatus(message){
+  const el=document.getElementById("ratingsBackupStatus");
+  if(el) el.textContent="評価バックアップ："+message;
+}
+async function acquireMyLifeGraphToken(){
+  if(!mylifeMsal) throw new Error("Microsoft接続が初期化されていません");
+  const account=mylifeMsal.getActiveAccount() || mylifeMsal.getAllAccounts()[0];
+  if(!account) throw new Error("先にMicrosoftへ接続してください");
+  try{
+    return await mylifeMsal.acquireTokenSilent({scopes:MYLIFE_MS_SCOPES,account});
+  }catch(e){
+    await mylifeMsal.acquireTokenRedirect({scopes:MYLIFE_MS_SCOPES,account});
+    throw new Error("Microsoft認証を更新しています。戻ったらもう一度バックアップしてください");
+  }
+}
+async function backupRatingsToOneDrive(){
+  const btn=document.getElementById("ratingsBackupBtn");
+  if(!btn)return;
+  btn.disabled=true;
+  try{
+    setRatingsBackupStatus("端末内の評価を読み取り中…");
+    const ratings=(await dbGet(APP_RATINGS_KEY))||{};
+    const entries=Object.entries(ratings);
+    const appEdited=entries.filter(([,v])=>v && (v.source==="app" || v.source==="legacy_app")).length;
+    const deviceId=getBackupDeviceId();
+    const payload={
+      format:"MY_LIFE_rating_backup_v1",
+      exported_at:new Date().toISOString(),
+      device_id:deviceId,
+      user_agent:navigator.userAgent,
+      rating_count:entries.length,
+      app_edited_count:appEdited,
+      ratings
+    };
+    const token=await acquireMyLifeGraphToken();
+    const filename="ratings_backup_"+deviceId+".json";
+    setRatingsBackupStatus("OneDriveへ保存中…");
+    const r=await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/"+encodeURIComponent(filename)+":/content",{
+      method:"PUT",
+      headers:{Authorization:"Bearer "+token.accessToken,"Content-Type":"application/json; charset=utf-8"},
+      body:JSON.stringify(payload,null,2)
+    });
+    if(!r.ok){
+      const detail=await r.text();
+      throw new Error("Graph "+r.status+" "+detail.slice(0,240));
+    }
+    setRatingsBackupStatus("成功 ✓  "+entries.length+"件を端末別ファイルへ退避しました");
+    btn.textContent="評価バックアップ済み ✓";
+  }catch(err){
+    console.error("Rating backup failed",err);
+    setRatingsBackupStatus("失敗。"+(err?.message||String(err)).slice(0,180));
+  }finally{
+    btn.disabled=false;
+  }
+}
+const ratingsBackupBtn=document.getElementById("ratingsBackupBtn");
+if(ratingsBackupBtn) ratingsBackupBtn.addEventListener("click",backupRatingsToOneDrive);
 
 initialLoad().catch(err=>{console.error(err);alert("初期データの読み込みに失敗しました。");});
 </script>
