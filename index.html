@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44 評価マスター導入</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44.1 評価マスター認証修正</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -2093,8 +2093,7 @@ async function createRatingsMasterFromBackups(){
   btn.disabled=true;
   try{
     setRatingsMasterStatus("OneDriveの端末別バックアップを読み取り中…");
-    const tokenObj=await acquireMyLifeGraphToken();
-    const token=tokenObj.accessToken;
+    const token=await acquireMyLifeGraphToken();
     const list=await graphJson("https://graph.microsoft.com/v1.0/me/drive/special/approot/children?$select=id,name,lastModifiedDateTime,file&$top=200",token);
     const files=(list.value||[]).filter(x=>/^ratings_backup_.+\.json$/i.test(x.name||"") && x.file);
     if(files.length<1) throw new Error("評価バックアップが見つかりません");
