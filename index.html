@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.45.1 評価マスター反映修正</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.45.2 評価マスター反映安定版</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -2221,7 +2221,6 @@ async function loadRatingsMasterIntoDevice(){
       (keptNewerLocal? "／端末側の新しい評価"+keptNewerLocal+"件を保持":"")
     );
     btn.textContent="評価マスター反映済み ✓";
-    renderList();
   }catch(err){
     console.error("Rating master load failed",err);
     setRatingsMasterStatus("反映失敗。"+(err?.message||String(err)).slice(0,220));
