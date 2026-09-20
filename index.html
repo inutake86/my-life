@@ -504,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44.2 評価差分マスター</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.44.3 評価マスター通信修正</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -2148,7 +2148,7 @@ async function createRatingsMasterFromBackups(){
     const filename="MY_LIFE_ratings_master.json";
     const r=await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/"+encodeURIComponent(filename)+":/content",{
       method:"PUT",
-      headers:{Authorization:"Bearer "+token,"Content-Type":"application/json; charset=utf-8"},
+      headers:{Authorization:"Bearer "+token.accessToken,"Content-Type":"application/json; charset=utf-8"},
       body:JSON.stringify(payload,null,2)
     });
     if(!r.ok){
