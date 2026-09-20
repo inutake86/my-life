@@ -496,6 +496,7 @@ body.detail-open .app{
 
 </style>
 <link rel="manifest" href="manifest.webmanifest">
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <meta name="theme-color" content="#2563eb">
 <meta name="mobile-web-app-capable" content="yes">
 
@@ -503,7 +504,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.37</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.38 OneDrive接続テスト</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -516,7 +517,9 @@ body.detail-open .app{
   <div class="test-grid">
     <label class="file-label">CSVを更新<input id="csvFile" type="file" accept=".csv,text/csv" hidden></label>
     <button id="clearSavedData">蔵書データを消去</button>
+    <button id="oneDriveTestBtn" type="button">Microsoftに接続</button>
   </div>
+  <div id="oneDriveStatus" class="test-note">OneDrive：未接続（接続テスト用。蔵書データは変更しません）</div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
@@ -1654,6 +1657,83 @@ function parseCSV(text){
   return out;
 }
 function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+
+
+// --- OneDrive / Microsoft Graph connection test (v0.38) ---
+const MYLIFE_MS_CLIENT_ID = "19e6630c-a35d-4050-91da-ea7377921b65";
+const MYLIFE_MS_SCOPES = ["User.Read", "Files.ReadWrite.AppFolder"];
+let mylifeMsal = null;
+
+function setOneDriveStatus(message){
+  const el=document.getElementById("oneDriveStatus");
+  if(el) el.textContent="OneDrive："+message;
+}
+
+async function initOneDriveTest(){
+  const btn=document.getElementById("oneDriveTestBtn");
+  if(!btn) return;
+  if(typeof msal === "undefined"){
+    setOneDriveStatus("認証ライブラリを読み込めませんでした。通信状態を確認してください。");
+    btn.disabled=true;
+    return;
+  }
+  mylifeMsal = new msal.PublicClientApplication({
+    auth:{
+      clientId:MYLIFE_MS_CLIENT_ID,
+      authority:"https://login.microsoftonline.com/common",
+      redirectUri:"https://inutake86.github.io/my-life/"
+    },
+    cache:{cacheLocation:"localStorage",storeAuthStateInCookie:false}
+  });
+
+  const redirectResult=await mylifeMsal.handleRedirectPromise();
+  if(redirectResult?.account) mylifeMsal.setActiveAccount(redirectResult.account);
+  let account=mylifeMsal.getActiveAccount() || mylifeMsal.getAllAccounts()[0];
+  if(account){
+    mylifeMsal.setActiveAccount(account);
+    btn.textContent="OneDrive接続を確認";
+    setOneDriveStatus("Microsoftサインイン済み。接続確認できます。");
+  }
+
+  btn.addEventListener("click",async()=>{
+    btn.disabled=true;
+    try{
+      account=mylifeMsal.getActiveAccount() || mylifeMsal.getAllAccounts()[0];
+      if(!account){
+        setOneDriveStatus("Microsoftのサインイン画面へ移動します…");
+        await mylifeMsal.loginRedirect({scopes:MYLIFE_MS_SCOPES});
+        return;
+      }
+      setOneDriveStatus("専用フォルダへ接続中…");
+      let token;
+      try{
+        token=await mylifeMsal.acquireTokenSilent({scopes:MYLIFE_MS_SCOPES,account});
+      }catch(e){
+        await mylifeMsal.acquireTokenRedirect({scopes:MYLIFE_MS_SCOPES,account});
+        return;
+      }
+      const r=await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot",{
+        headers:{Authorization:"Bearer "+token.accessToken}
+      });
+      if(!r.ok){
+        const detail=await r.text();
+        throw new Error("Graph "+r.status+" "+detail.slice(0,300));
+      }
+      const folder=await r.json();
+      btn.textContent="接続成功 ✓";
+      setOneDriveStatus("接続成功。専用フォルダ「"+(folder.name||"MY LIFE")+"」を確認しました。蔵書データは変更していません。");
+    }catch(err){
+      console.error("OneDrive connection test failed",err);
+      setOneDriveStatus("接続失敗。画面を閉じず、この表示を教えてください。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
+      btn.disabled=false;
+    }
+  });
+}
+
+initOneDriveTest().catch(err=>{
+  console.error("OneDrive test init failed",err);
+  setOneDriveStatus("初期化に失敗しました。"+(err?.message?"（"+err.message.slice(0,120)+"）":""));
+});
 
 initialLoad().catch(err=>{console.error(err);alert("初期データの読み込みに失敗しました。");});
 </script>
