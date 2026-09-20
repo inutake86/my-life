@@ -518,15 +518,15 @@ body.detail-open .app{
     <label class="file-label">CSVを更新<input id="csvFile" type="file" accept=".csv,text/csv" hidden></label>
     <button id="clearSavedData" hidden>蔵書データを消去</button>
     <button id="oneDriveTestBtn" hidden type="button">Microsoftに接続</button>
-    <button id="ratingsBackupBtn" hidden type="button" disabled>評価をOneDriveへ退避</button>
+    <button id="ratingsBackupBtn" type="button" disabled>OneDriveに評価データを送信</button>
     <button id="ratingsCompareBtn" hidden type="button" disabled>PC・タブレット評価を比較</button>
     <button id="ratingsDiagnoseBtn" hidden type="button" disabled>評価4303件の正体を診断</button>
     <button id="ratingsBackupListBtn" hidden type="button" disabled>バックアップ実体を確認</button>
     <button id="ratingsMasterCreateBtn" hidden type="button" disabled>3端末から評価マスターを作成</button>
-    <button id="ratingsMasterLoadBtn" type="button" disabled>評価マスターをこの端末へ反映</button>
+    <button id="ratingsMasterLoadBtn" type="button" disabled>別端末の評価データを同期</button>
   </div>
   <div id="oneDriveStatus" hidden class="test-note">OneDrive：未接続</div>
-  <div id="ratingsBackupStatus" hidden class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
+  <div id="ratingsBackupStatus" class="test-note">評価バックアップ：未実行（端末ごとに別ファイルへ保存します）</div>
   <div id="ratingsCompareStatus" hidden class="test-note">評価比較：未実行（比較だけで、統合・上書きはしません）</div>
   <div id="ratingsDiagnoseStatus" hidden class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
   <div id="ratingsBackupListStatus" hidden class="test-note">バックアップ実体：未確認（OneDrive内を読むだけです）</div>
@@ -2220,7 +2220,7 @@ async function loadRatingsMasterIntoDevice(){
       "件／この端末へ反映"+applied+"件"+
       (keptNewerLocal? "／端末側の新しい評価"+keptNewerLocal+"件を保持":"")
     );
-    btn.textContent="評価マスター反映済み ✓";
+    btn.textContent="別端末の評価データを同期済み ✓";
   }catch(err){
     console.error("Rating master load failed",err);
     setRatingsMasterStatus("反映失敗。"+(err?.message||String(err)).slice(0,220));
