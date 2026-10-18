@@ -495,7 +495,7 @@ body.detail-open .app{
 }
 
 
-/* MY LIFE v0.48: favorite + 8-question review */
+/* MY LIFE v0.48: favorite + 7-question review */
 .favorite-detail-action{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px}
 #favoriteToggle{border:1px solid var(--line);background:#fff;color:var(--text);border-radius:9px;padding:9px 12px;font-weight:800}
 #favoriteToggle.is-favorite{border-color:#cf4c75;color:#b32e59;background:#fff3f6}
@@ -513,6 +513,14 @@ body.detail-open .app{
 #newReviewSave{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:11px 15px;font-weight:800}
 #newReviewSave:disabled{opacity:.48}#newReviewNotice{font-size:12px;color:var(--muted)}
 .legacy-rating-panel{border-top:1px solid var(--line);padding:12px 1px}.legacy-rating-panel summary{cursor:pointer;font-size:13px;color:var(--muted);font-weight:700}
+/* v0.50: review status hearts only; favorites are a separate text button */
+.review-hearts{position:absolute;right:10px;top:9px;display:flex;gap:4px;align-items:center;min-height:22px}
+.review-heart{display:inline-flex;width:21px;height:21px}
+.review-heart svg{display:block;width:100%;height:100%}
+.review-heart.legacy-heart svg{fill:#2878dc;stroke:#2878dc;stroke-width:1}
+.review-heart.current-heart svg{fill:#e53935;stroke:#e53935;stroke-width:1}
+.detail-review-hearts{display:flex;gap:6px;align-items:center;padding:8px 3px}
+.detail-review-hearts .review-heart{width:25px;height:25px}
 /* v0.49: one-question-at-a-time, large tap targets */
 .new-review-wrap{padding:14px 3px 18px}
 .new-review-intro{margin-bottom:13px;font-size:15px}
@@ -636,7 +644,7 @@ body.detail-open .app{
     <div class="cover-note">表紙をタップで拡大</div>
   </div>
 
-  <div class="favorite-detail-action"><button id="favoriteToggle" type="button" aria-pressed="false">♡ お気に入りに登録</button><span id="practicalIndicator" class="practical-indicator hidden">抜</span></div>
+  <div class="favorite-detail-action"><button id="favoriteToggle" type="button" aria-pressed="false">お気に入り登録する</button><span id="practicalIndicator" class="practical-indicator hidden">抜</span></div>
   <div class="detail-actions detail-actions-three">
     <button id="reviewBtn" class="review-action">レビューする</button>
     <a id="productBtn" class="action-link product-primary" href="#" target="_blank" rel="noopener">作品をよむ</a>
@@ -767,7 +775,7 @@ const STORE="kv";
 const LIBRARY_KEY="libraryData";
 const APP_RATINGS_KEY="appRatingsV1";
 const LEGACY_QUICK_KEY="quickScores";
-const NEW_REVIEWS_KEY="newReviewsV2";
+const NEW_REVIEWS_KEY="newReviewsV3";
 const FAVORITES_KEY="favoriteWorksV1";
 
 const QUICK_SCORES_STAR_TOP=["5.00","4.90","4.70"];
@@ -843,6 +851,11 @@ function selfScoreDisplay(w){
   return rec?.star===true ? `★${score}` : score;
 }
 
+function reviewHeartsHtml(w){
+ const key=workKey(w),old=numericSelfScore(w)!==null,latest=!!newReviews[key];
+ const svg='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.2-4.35-9.55-8.55C.7 9.3 2.15 5.5 5.9 4.45 8.1 3.83 10.2 4.6 12 6.45c1.8-1.85 3.9-2.62 6.1-2 3.75 1.05 5.2 4.85 3.45 8C19.2 16.65 12 21 12 21Z"/></svg>';
+ return '<div class="detail-review-hearts">'+(old?'<span class="review-heart legacy-heart" title="旧レビュー">'+svg+'</span>':'')+(latest?'<span class="review-heart current-heart" title="新レビュー">'+svg+'</span>':'')+'</div>';
+}
 function numericSelfScore(w){
   const raw=String(w?.score??"").trim();
   const n=Number(raw);
@@ -859,8 +872,9 @@ function workRowHtml(w,meta){
   const currentNum=newReviews[workKey(w)]?.score??n;
   const cls=(starred ? "score-badge starred" : (currentNum!==null && currentNum>=4.7 ? "score-badge high" : "score-badge")) + (currentNum!==null && currentNum<=3.0 ? " no-value" : "");
   const heartSvg=`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s-7.2-4.35-9.55-8.55C.7 9.3 2.15 5.5 5.9 4.45 8.1 3.83 10.2 4.6 12 6.45c1.8-1.85 3.9-2.62 6.1-2 3.75 1.05 5.2 4.85 3.45 8C19.2 16.65 12 21 12 21Z"/></svg>`;
-  return `<div class="read-heart ${read?"read":"unread"}" aria-label="${read?"既読":"未読"}">${heartSvg}</div>`+
-    `<div class="work-title">${favoriteStates[workKey(w)]===true?'<span class="favorite-mark">♡</span>':''}${newReviews[workKey(w)]?.answers?.[0]===0?'<span class="practical-mark">抜</span>':''}${escapeHtml(w.title)}</div>`+
+  const reviewHearts=`${read?`<span class="review-heart legacy-heart" title="旧レビュー登録済み">${heartSvg}</span>`:""}${newReviews[workKey(w)]?`<span class="review-heart current-heart" title="新レビュー登録済み">${heartSvg}</span>`:""}`;
+  return `<div class="review-hearts" aria-label="レビュー登録状況">${reviewHearts}</div>`+
+    `<div class="work-title">${newReviews[workKey(w)]?.answers?.[0]===0?'<span class="practical-mark">抜</span>':''}${escapeHtml(w.title)}</div>`+
     `<div class="work-meta-line"><div class="work-meta">${escapeHtml(meta||"")}</div>${(read||newReviews[workKey(w)])?`<span class="${cls}">${escapeHtml(display)}</span>`:""}</div>`;
 }
 
@@ -1337,7 +1351,7 @@ function openDetail(w){
   const selfScore=selfScoreDisplay(w)||"未読";
   document.getElementById("detailRatings").innerHTML=
     `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
-    `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`;
+    `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`+reviewHeartsHtml(w);
 
   const productBtn=document.getElementById("productBtn");
   if(productUrl && productUrl!=="#"){
@@ -1635,7 +1649,7 @@ function refreshDetailRatings(w){
     const selfScore=selfScoreDisplay(w)||"未読";
     document.getElementById("detailRatings").innerHTML=
       `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
-      `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`;
+      `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`+reviewHeartsHtml(w);
   }
 }
 document.getElementById("reviewWindowClose").onclick=closeReviewWindow;
@@ -1665,21 +1679,25 @@ document.getElementById("imageViewer").onclick=e=>{
 
 
 const REVIEW_QUESTIONS=[
- {q:"① 率直に聞きます。実用的でしたか？",help:"実用的とは、つまりそういう意味です。勘のいいあなたなら意味がわかるはずです。",opts:[["はい、実用的でした",0],["いいえ、実用的ではありませんでした",1]]},
- {q:"② この作品は読みやすかったですか？",help:"説明や導入がくどくど長かったり、何をやっているのかわかりづらかったり……。要するに、飽きずに読めたかってことです。",opts:[["すらすら流れるように読めた",0],["良くも悪くも普通。でも及第点",1],["ちょっと読むのに苦戦した",3],["作者に悪感情を持つレベル！",5]]},
- {q:"③ 読んでて感情が動いた？",help:"感情とは、「楽しい」「面白い」「かわいい」「つらい」「苦しい」「ムカつく」などなど。「癒やされる」というのも、立派に感情が動いた証拠です。",opts:[["大きく感情が動いた",0],["多少は心が動いた",1],["普通すぎて何も動かなかった",5]]},
- {q:"④ 読後、どんな気持ちになった？",help:"ハッピーエンドかどうかだけではありません。悲しい結末でも、あなた自身が納得できたなら、それはそれでアリ。大切なのは、読み終えたあとにあなたがどう感じたかです。",opts:[["前向きで明るい気持ちになった",0],["これはこれで良い結末だったのかも…。",0],["せつないラストやなあ",1],["え？ 胸糞すぎる",3],["むなしい感じ",2]]},
- {q:"⑤ エロ表現、どうだった？",help:"演出や表情、セリフなどは特に心に残るものです。エロさは画力だけでは決まりません。シチュエーションも含めた、総合的な魅力なのかもしれません。",opts:[["とてもエロかった",0],["良かったのにページ不足だわ…",1],["刺激が弱かった",3],["なにやってるのかわからん！",5]]},
- {q:"⑥ 続編があったら買いたい？",help:"登場人物のその後が気になるかどうか。逆に、また悲惨な展開になるなら読みたくない、という気持ちも正直なところでしょう。簡単に言います。お金を出して、この作品の続きを読みたいか？ ということです。",opts:[["定価でも買っちゃう",0],["セールされてたら買うかなあ",0],["気分次第で買うかもしれない",1],["買うわけがない",3],["むしろ捨てたい！",8]]},
- {q:"⑦ また読みたい？",help:"楽しい気持ちになれるならもちろん、嫌な内容だったとしても、実用的なら読み返したくなるよね。逆に、悪くない作品でも、あまりに無難で及第点すぎたら『もう読まなくてもいいかな』ってならない？",opts:[["何度でも読みたい",0],["読み返すだろうな",0],["たぶん、読むかも……",0],["できれば読みたくない",2],["記憶から消したい",5]]},
- {q:"⑧ 名作だった？",help:"そのジャンルの歴史に残るような作品。あるいは、誰かにおすすめしたくなる作品。『自分がめちゃくちゃ好き！』という気持ちも大事です。それ以外なら、答えはNO。",opts:[["YES！ 名作だった",0],["NO、そこまでではない",1]]}
+ {q:"実用的だった？",help:"実用的。つまりそういうこと。",opts:[["抜けた", 0], ["あとちょっと", 1], ["けっこうエロい", 3], ["無理", 8]]},
+ {q:"ヒロインの魅力は？",help:"容姿だけでなく、性格や言動も含めた総合評価。複数いる場合は、うらやましい気持ちを評価する。",opts:[["めちゃくちゃ魅力的", 0], ["けっこう良い", 1], ["テンプレ気味", 3], ["嫌な女", 2]]},
+ {q:"シチュエーションは良かった？",help:"設定や演出とか。テンプレも許そう。",opts:[["よくこんな設定思いつくなあ", 0], ["テンプレだけど良い", 1], ["よくある設定で飽き飽き", 5], ["無茶苦茶すぎてよくわからん", 6]]},
+ {q:"ストーリーは面白かった？",help:"エロ漫画にストーリーは求めてないが、それでも稀に良作がある。",opts:[["すばらしい", 0], ["及第点（よくまとまってる）", 1], ["普通（内容がないよう）", 3], ["よくわからない（よくわからない）", 6]]},
+ {q:"感情がうごいた？",help:"喜怒哀楽どんな感情であれ心が動いたら。",opts:[["大きく心が動いた", 0], ["ちょっとは心に残った", 2], ["普通。なにも残らない", 7]]},
+ {q:"で？どんな気持ちになったの？",help:"元気になる感情もあれば、身体を動かすのもおっくうになる憂鬱な気持ちってあるよね。",opts:[["ハッピーな気持ちになった！", 0], ["これはこれで良い結末だったのかも…。", 0], ["ちょっと切なすぎない？", 2], ["胸糞すぎる", 5], ["むなしい。むなしい", 8]]},
+ {q:"名作だった？",help:"ずばり",opts:[["名作だった！", 0], ["惜しい", 1], ["良作", 2], ["普通", 5], ["価値なし", 12]]}
 ];
 async function loadNewLibraryStates(){
  const a=await dbGet(NEW_REVIEWS_KEY),b=await dbGet(FAVORITES_KEY);
  newReviews=(a&&typeof a==="object"&&!Array.isArray(a))?a:{};
  favoriteStates=(b&&typeof b==="object"&&!Array.isArray(b))?b:{};
 }
-function reviewScore(answers){return (50-answers.reduce((sum,v,i)=>sum+REVIEW_QUESTIONS[i].opts[v][1],0))/10;}
+function reviewScore(answers){
+ const tenths=50-answers.reduce((sum,v,i)=>sum+REVIEW_QUESTIONS[i].opts[v][1],0);
+ // 3.5以下→1.0、3.6～3.9→3.0。実用性①「抜けた」は最低4.0。
+ const adjusted=tenths<=35?10:tenths<40?30:tenths;
+ return Math.max(answers[0]===0?40:10,adjusted)/10;
+}
 let newReviewStep=0;
 let newReviewDraft=[];
 let newReviewSaving=false;
@@ -1725,7 +1743,7 @@ async function saveNewReview(w){
  newReviewSaving=true;
  document.getElementById("newReviewNotice").textContent="保存しています…";
  document.querySelectorAll("#newReviewQuestions button").forEach(b=>b.disabled=true);
- newReviews[key]={version:2,answers,score:reviewScore(answers),updated_at:new Date().toISOString()};
+ newReviews[key]={version:3,answers,score:reviewScore(answers),updated_at:new Date().toISOString()};
  try{await dbPut(NEW_REVIEWS_KEY,newReviews);}catch(err){
    if(previous===undefined)delete newReviews[key];else newReviews[key]=previous;
    newReviewSaving=false;renderNewReviewStep(w);
@@ -1736,8 +1754,8 @@ async function saveNewReview(w){
  refreshDetailRatings(w);refreshFavoriteInDetail(w);renderFavorites();renderPurchaseReset();renderRecent();
  const host=document.getElementById("newReviewQuestions");host.replaceChildren();
  const done=document.createElement("div");done.className="new-review-question";
- const heading=document.createElement("strong");heading.textContent="レビューを保存しました";done.appendChild(heading);
- const desc=document.createElement("div");desc.className="new-review-help";desc.textContent="8問の回答を保存しました。旧評価は変更していません。";done.appendChild(desc);
+ const heading=document.createElement("strong");heading.textContent="レビューを保存しました："+reviewScore(answers).toFixed(1)+"点";done.appendChild(heading);
+ const desc=document.createElement("div");desc.className="new-review-help";desc.textContent="7問の回答を保存しました。旧評価は変更していません。";done.appendChild(desc);
  const again=document.createElement("button");again.type="button";again.className="new-review-choice";again.textContent="回答を見直す";again.onclick=()=>renderNewReview(w);done.appendChild(again);
  host.appendChild(done);
  document.getElementById("newReviewScore").textContent="完了";
@@ -1746,7 +1764,7 @@ async function saveNewReview(w){
 }
 function refreshFavoriteInDetail(w){
  const key=workKey(w),button=document.getElementById("favoriteToggle"),fav=favoriteStates[key]===true;
- button.textContent=fav?"♥ お気に入り登録済み":"♡ お気に入りに登録";
+ button.textContent=fav?"お気に入り解除":"お気に入り登録する";
  button.classList.toggle("is-favorite",fav);button.setAttribute("aria-pressed",String(fav));
  button.onclick=()=>toggleFavorite(w);
  document.getElementById("practicalIndicator").classList.toggle("hidden",newReviews[key]?.answers?.[0]!==0);
@@ -1769,7 +1787,7 @@ function renderFavorites(){
  document.getElementById("favoritesCount").textContent=`${chosen.length} / ${all.length}作品`;
  const box=document.getElementById("favoritesList");box.replaceChildren();
  if(!chosen.length){const p=document.createElement("div");p.className="favorite-empty";
- p.textContent=practicalOnly?"実用的だったお気に入り作品はまだありません。":"作品の詳細画面で♡を押すと、ここに表示されます。";box.appendChild(p);return;}
+ p.textContent=practicalOnly?"実用的だったお気に入り作品はまだありません。":"作品の詳細画面で「お気に入り登録する」を押すと、ここに表示されます。";box.appendChild(p);return;}
  chosen.sort((a,b)=>(b.purchase_date||"").localeCompare(a.purchase_date||""));
  const fragment=document.createDocumentFragment();
  for(const w of chosen){const b=document.createElement("button");b.className="work-row purchase-row";b.dataset.workId=workKey(w);
@@ -1777,7 +1795,7 @@ function renderFavorites(){
  box.appendChild(fragment);
 }
 document.getElementById("newReviewBackup").onclick=()=>{
- const payload={format:"my-life-review-favorites-v1",exported_at:new Date().toISOString(),reviews:newReviews,favorites:favoriteStates};
+ const payload={format:"my-life-review-favorites-v2",exported_at:new Date().toISOString(),reviews:newReviews,favorites:favoriteStates};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);
  const link=document.createElement("a");link.href=url;link.download=`MY_LIFE_reviews_backup_${new Date().toISOString().slice(0,10)}.json`;
  document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
@@ -1785,7 +1803,7 @@ document.getElementById("newReviewBackup").onclick=()=>{
 document.getElementById("newReviewRestore").onchange=async e=>{
  const file=e.target.files?.[0];if(!file)return;
  try{const parsed=JSON.parse(await file.text());
-   if(parsed.format!=="my-life-review-favorites-v1"||!parsed.reviews||!parsed.favorites)throw Error("形式が違います");
+   if(parsed.format!=="my-life-review-favorites-v2"||!parsed.reviews||!parsed.favorites)throw Error("形式が違います");
    if(!confirm("現在の新レビューとお気に入りをバックアップの内容で置き換えます。続けますか？"))return;
    await dbPut(NEW_REVIEWS_KEY,parsed.reviews);await dbPut(FAVORITES_KEY,parsed.favorites);
    newReviews=parsed.reviews;favoriteStates=parsed.favorites;
