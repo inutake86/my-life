@@ -989,7 +989,9 @@ function buildIndexes(){
     else if(/[0-9]/.test(dc)) key="#";
     else{
       const y=norm(a.author_kana||a.author);
-      const first=y.slice(0,1);
+      // 五十音の分類時だけ濁点・半濁点を除去（ば/ぱ→は、が→か等）。
+      // 並べ替えや元データには影響しない。
+      const first=y.slice(0,1).normalize("NFD").replace(/[\u3099\u309a]/g, "");
       if(authorsByKana.has(first)) key=first;
     }
     authorsByKana.get(key).push(a);
