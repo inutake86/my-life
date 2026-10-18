@@ -555,6 +555,22 @@ body.detail-open .app{
 .follow-circle{border:1px solid var(--line,#d1d5db);border-radius:12px;margin:10px 0;overflow:hidden;background:var(--surface,#fff)}
 .follow-circle>summary{cursor:pointer;padding:14px 16px;font-weight:700;min-height:48px}
 .follow-circle .favorite-list{padding:0 8px 9px}
+/* Scoring settings: subdued gear, compact editable deduction controls. */
+.score-settings-trigger{margin-left:auto;background:transparent;border:1px solid var(--line,#bbb);color:var(--muted,#6b7280);font-size:19px;border-radius:9px;min-width:38px;min-height:38px;cursor:pointer}
+.score-settings-panel{margin:12px 0;padding:15px;background:var(--surface,#fff);border:1px solid var(--line,#ddd);border-radius:14px}
+.score-settings-panel.hidden{display:none}
+.score-settings-head,.score-settings-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.score-settings-head h2{font-size:17px;margin:0}
+.score-settings-head button,.score-settings-actions button{padding:9px 12px;border:1px solid var(--line,#ccc);border-radius:8px;background:var(--surface,#fff);color:inherit;cursor:pointer}
+.score-settings-actions{justify-content:flex-start;margin-top:12px}
+#scoreSettingsSave{font-weight:700}
+.score-settings-note{color:var(--muted,#64748b);font-size:12px;line-height:1.6}
+.score-settings-group{margin:12px 0;border:1px solid var(--line,#ddd);padding:10px;border-radius:10px}
+.score-settings-group legend{font-weight:700;padding:0 5px;font-size:14px}
+.score-settings-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line,#eee)}
+.score-settings-item:last-child{border:0}
+.score-settings-item span{font-size:13px;line-height:1.4;flex:1;min-width:0}
+.score-settings-item input{width:69px;min-width:69px;padding:8px 5px;text-align:right;background:var(--surface,#fff);color:inherit;border:1px solid var(--line,#ccc);border-radius:7px;font-size:14px}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
@@ -565,7 +581,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.52 8問レビュー</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.53 8問レビュー</span><button id="scoreSettingsOpen" class="score-settings-trigger" type="button" aria-label="採点設定" title="採点設定">⚙</button></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -574,6 +590,14 @@ body.detail-open .app{
   </div>
   <div id="perfBar" class="perfbar"><span>データ <b>読込中</b></span></div>
 </header>
+
+<section id="scoreSettingsPanel" class="score-settings-panel hidden" aria-label="採点設定">
+ <div class="score-settings-head"><h2>⚙ 採点設定</h2><button id="scoreSettingsClose" type="button" aria-label="閉じる">閉じる ×</button></div>
+ <p class="score-settings-note">8問の各選択肢の減点値を0.1点単位で編集できます。変更すると保存済みレビューも再計算されます。</p>
+ <div id="scoreSettingsFields"></div>
+ <div class="score-settings-actions"><button id="scoreSettingsSave" type="button">設定を保存して再計算</button><button id="scoreSettingsReset" type="button">初期値に戻す</button></div>
+ <p id="scoreSettingsStatus" class="score-settings-note" aria-live="polite"></p>
+</section>
 
 <details class="test">
   <summary>データ管理</summary>
@@ -736,6 +760,7 @@ const norm=s=>kataToHira(String(s||"").trim()).toLowerCase();
 let builtIn, works=[], authors=[], worksByAuthor=new Map(), authorsByKana=new Map();
 let purchaseShown=0, lastPerf="", appRatings={}, currentDetailWork=null, currentAuthorForWorks=null;
 let newReviews={}, archivedReviews7={}, savedReviews8={}, favoriteStates={}, practicalOnly=false;
+let scoreDeductions=null;
 
 // v0.37: refresh後も「五十音 / 購入順」とスクロール位置をできるだけ維持する
 const VIEW_STATE_KEY="myLifeViewStateV1";
@@ -811,6 +836,7 @@ const LEGACY_QUICK_KEY="quickScores";
 const OLD_NEW_REVIEWS_KEY="newReviewsV3";
 const NEW_REVIEWS_KEY="newReviewsV4";
 const FAVORITES_KEY="favoriteWorksV1";
+const SCORE_SETTINGS_KEY="reviewScoreDeductionsV1";
 
 const QUICK_SCORES_STAR_TOP=["5.00","4.90","4.70"];
 const QUICK_SCORES_STAR_BOTTOM=["4.50","4.30","4.10","4.00"];
@@ -1724,29 +1750,105 @@ document.getElementById("imageViewer").onclick=e=>{
 
 const REVIEW_QUESTIONS=[
  {q:"実用的だった？",help:"実用的。つまりそういうこと。",opts:[["抜けた", 0], ["あとちょっと", 1], ["けっこうエロい", 3], ["無理", 8]]},
- {q:"ヒロインの魅力は？",help:"容姿だけでなく、性格や言動も含めた総合評価。複数いる場合は、うらやましい気持ちを評価する。",opts:[["めちゃくちゃ魅力的", 0], ["けっこう良い", 1], ["テンプレ気味", 3], ["嫌な女", 2]]},
+ {q:"ヒロインの魅力は？",help:"容姿だけでなく、性格や言動も含めた総合評価。複数いる場合は、うらやましい気持ちを評価する。",opts:[["めちゃくちゃ魅力的", 0], ["けっこう良い", 1], ["普通", 2], ["魅力を感じない", 3]]},
  {q:"シチュエーションは良かった？",help:"設定や演出とか。テンプレも許そう。",opts:[["よくこんな設定思いつくなあ", 0], ["テンプレだけど良い", 1], ["よくある設定で飽き飽き", 5], ["無茶苦茶すぎてよくわからん", 6]]},
  {q:"ストーリーは面白かった？",help:"エロ漫画にストーリーは求めてないが、それでも稀に良作がある。",opts:[["すばらしい", 0], ["及第点（よくまとまってる）", 1], ["普通（内容がないよう）", 3], ["よくわからない（よくわからない）", 6]]},
- {q:"感情がうごいた？",help:"喜怒哀楽どんな感情であれ心が動いたら。",opts:[["大きく心が動いた", 0], ["ちょっとは心に残った", 2], ["普通。なにも残らない", 7]]},
+ {q:"感情がうごいた？",help:"喜怒哀楽どんな感情であれ心が動いたら。",opts:[["大きく心が動いた", 0], ["ちょっとは心に残った", 1], ["普通。なにも残らない", 7]]},
  {q:"で？どんな気持ちになったの？",help:"元気になる感情もあれば、身体を動かすのもおっくうになる憂鬱な気持ちってあるよね。",opts:[["ハッピーな気持ちになった！", 0], ["これはこれで良い結末だったのかも…。", 0], ["ちょっと切なすぎない？", 2], ["胸糞すぎる", 5], ["むなしい。むなしい", 8]]},
- {q:"続編が出たら読みたい？",help:"この作品の続きや、同じサークルの次回作を追いかけたいと思う？",opts:[["絶対に買う",0],["セール次第",0],["タイミング次第",1],["もう読まなくていい",2]]},
+ {q:"続編が出たら読みたい？",help:"この作品の続きや、同じサークルの次回作を追いかけたいと思う？",opts:[["絶対に買う",0],["セール次第",0],["タイミング次第",0],["もう読まなくていい",2]]},
  {q:"名作だった？",help:"ずばり",opts:[["名作だった！", 0], ["惜しい", 1], ["良作", 2], ["普通", 5], ["価値なし", 12]]}
 ];
-async function loadNewLibraryStates(){
- const old=await dbGet(OLD_NEW_REVIEWS_KEY),current=await dbGet(NEW_REVIEWS_KEY),favorites=await dbGet(FAVORITES_KEY);
- archivedReviews7=(old&&typeof old==="object"&&!Array.isArray(old))?old:{};
- savedReviews8=(current&&typeof current==="object"&&!Array.isArray(current))?current:{};
- // The 7-question results stay visible until each work is re-reviewed with Q7.
- newReviews={...archivedReviews7,...savedReviews8};
- favoriteStates=(favorites&&typeof favorites==="object"&&!Array.isArray(favorites))?favorites:{};
+function defaultScoreDeductions(){return REVIEW_QUESTIONS.map(q=>q.opts.map(o=>o[1]));}
+function validateScoreDeductions(value){
+ return Array.isArray(value)&&value.length===REVIEW_QUESTIONS.length&&value.every((row,i)=>Array.isArray(row)&&row.length===REVIEW_QUESTIONS[i].opts.length&&row.every(n=>Number.isInteger(n)&&n>=0&&n<=50));
 }
-
-function reviewScore(answers){
- const tenths=50-answers.reduce((sum,v,i)=>sum+REVIEW_QUESTIONS[i].opts[v][1],0);
- // 3.5以下→1.0、3.6～3.9→3.0。実用性①「抜けた」は最低4.0。
+function recalculateReviewScore(answers){
+ if(!Array.isArray(answers))return null;
+ const isOld=answers.length===7;
+ if(!isOld&&answers.length!==8)return null;
+ const seq=isOld?[0,1,2,3,4,5,7]:[0,1,2,3,4,5,6,7];
+ if(answers.some((v,i)=>!Number.isInteger(v)||v<0||v>=scoreDeductions[seq[i]].length))return null;
+ const tenths=50-answers.reduce((sum,v,i)=>sum+scoreDeductions[seq[i]][v],0);
  const adjusted=tenths<=35?10:tenths<40?30:tenths;
  return Math.max(answers[0]===0?40:10,adjusted)/10;
 }
+function recalculateAllReviewScores(){
+ for(const collection of [archivedReviews7,savedReviews8]){
+  for(const rec of Object.values(collection)){
+   const score=recalculateReviewScore(rec?.answers);
+   if(score!==null)rec.score=score;
+  }
+ }
+ newReviews={...archivedReviews7,...savedReviews8};
+}
+async function loadNewLibraryStates(){
+ const [old,current,favorites,settings]=await Promise.all([dbGet(OLD_NEW_REVIEWS_KEY),dbGet(NEW_REVIEWS_KEY),dbGet(FAVORITES_KEY),dbGet(SCORE_SETTINGS_KEY)]);
+ archivedReviews7=(old&&typeof old==="object"&&!Array.isArray(old))?old:{};
+ savedReviews8=(current&&typeof current==="object"&&!Array.isArray(current))?current:{};
+ favoriteStates=(favorites&&typeof favorites==="object"&&!Array.isArray(favorites))?favorites:{};
+ scoreDeductions=validateScoreDeductions(settings)?settings:defaultScoreDeductions();
+ recalculateAllReviewScores();
+}
+function reviewScore(answers){return recalculateReviewScore(answers);}
+function renderScoreSettings(){
+ const host=document.getElementById("scoreSettingsFields");host.replaceChildren();
+ REVIEW_QUESTIONS.forEach((q,i)=>{
+  const field=document.createElement("fieldset");field.className="score-settings-group";
+  const legend=document.createElement("legend");legend.textContent=`${i+1}. ${q.q}`;field.appendChild(legend);
+  q.opts.forEach(([name],j)=>{
+   const row=document.createElement("label");row.className="score-settings-item";
+   const label=document.createElement("span");label.textContent=name;row.appendChild(label);
+   const input=document.createElement("input");input.type="number";input.min="0";input.max="5";input.step="0.1";
+   input.value=(scoreDeductions[i][j]/10).toFixed(1);input.dataset.q=String(i);input.dataset.a=String(j);input.setAttribute("aria-label",`${q.q} ${name} の減点値`);
+   row.appendChild(input);field.appendChild(row);
+  });host.appendChild(field);
+ });
+ document.getElementById("scoreSettingsStatus").textContent="減点値はプラスの数値で指定します（例：0.2 は −0.2 点）。";
+}
+function refreshRecalculatedScores(){
+ renderRecent();renderFavorites();renderFollowList();renderPurchaseReset();
+ document.querySelectorAll("[data-work-id]").forEach(row=>{
+  const key=row.getAttribute("data-work-id"),w=works.find(w=>workKey(w)===key);
+  if(!w)return;
+  const score=row.querySelector(".score-badge");
+  if(score){score.textContent=selfScoreDisplay(w);score.classList.remove("score-tier-top","score-tier-mid","score-tier-low","score-tier-neutral");const tier=scoreTierClass(w);if(tier)score.classList.add(tier);}
+ });
+ if(currentDetailWork)refreshDetailRatings(currentDetailWork);
+}
+document.getElementById("scoreSettingsOpen").onclick=()=>{
+ const panel=document.getElementById("scoreSettingsPanel");panel.classList.toggle("hidden");
+ if(!panel.classList.contains("hidden")){renderScoreSettings();panel.scrollIntoView({behavior:"smooth",block:"start"});}
+};
+document.getElementById("scoreSettingsClose").onclick=()=>document.getElementById("scoreSettingsPanel").classList.add("hidden");
+document.getElementById("scoreSettingsSave").onclick=async()=>{
+ const next=defaultScoreDeductions();
+ for(const input of document.querySelectorAll("#scoreSettingsFields input")){
+  const n=Number(input.value);
+  if(!input.value.trim()||!Number.isFinite(n)||n<0||n>5||Math.abs(n*10-Math.round(n*10))>1e-7){
+   alert("減点値は0.0～5.0の範囲で0.1刻みで入力してください。");input.focus();return;
+  }
+  next[Number(input.dataset.q)][Number(input.dataset.a)]=Math.round(n*10);
+ }
+ const status=document.getElementById("scoreSettingsStatus");status.textContent="保存しています…";
+ const prev=scoreDeductions;scoreDeductions=next;
+ try{
+  // Persist the setting and recomputed record scores together in the same KV transaction.
+  const db=await openMyLifeDB();
+  recalculateAllReviewScores();
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction(STORE,"readwrite"),store=tx.objectStore(STORE);
+   store.put(scoreDeductions,SCORE_SETTINGS_KEY);store.put(archivedReviews7,OLD_NEW_REVIEWS_KEY);store.put(savedReviews8,NEW_REVIEWS_KEY);
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+  });
+  refreshRecalculatedScores();status.textContent="保存しました。過去のレビューも新しい基準で再計算しました。";
+ }catch(err){scoreDeductions=prev;recalculateAllReviewScores();status.textContent="保存に失敗しました。変更は反映されていません。";console.warn(err);}
+};
+document.getElementById("scoreSettingsReset").onclick=()=>{
+ if(!confirm("編集欄を初期値に戻しますか？ 保存ボタンを押すまでは反映しません。"))return;
+ // Reset editable fields without changing the saved score rules yet.
+ const defaults=defaultScoreDeductions();
+ document.querySelectorAll("#scoreSettingsFields input").forEach(input=>{input.value=(defaults[Number(input.dataset.q)][Number(input.dataset.a)]/10).toFixed(1);});
+};
 let newReviewStep=0;
 let newReviewDraft=[];
 let newReviewSaving=false;
@@ -1882,7 +1984,7 @@ function renderFollowList(){
  }
 }
 document.getElementById("newReviewBackup").onclick=()=>{
- const payload={format:"my-life-review-favorites-v3",exported_at:new Date().toISOString(),reviews8:savedReviews8,reviews7:archivedReviews7,favorites:favoriteStates};
+ const payload={format:"my-life-review-favorites-v3",exported_at:new Date().toISOString(),reviews8:savedReviews8,reviews7:archivedReviews7,favorites:favoriteStates,scoreSettings:scoreDeductions};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);
  const link=document.createElement("a");link.href=url;link.download=`MY_LIFE_reviews_backup_${new Date().toISOString().slice(0,10)}.json`;
  document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
@@ -1896,8 +1998,9 @@ document.getElementById("newReviewRestore").onchange=async e=>{
    if(!incoming8||!incoming7||typeof incoming8!=="object"||typeof incoming7!=="object")throw Error("レビューデータがありません");
    if(!confirm("現在の新レビューとお気に入りをバックアップの内容で置き換えます。続けますか？"))return;
    await dbPut(OLD_NEW_REVIEWS_KEY,incoming7);await dbPut(NEW_REVIEWS_KEY,incoming8);await dbPut(FAVORITES_KEY,parsed.favorites);
-   archivedReviews7=incoming7;savedReviews8=incoming8;newReviews={...archivedReviews7,...savedReviews8};favoriteStates=parsed.favorites;
-   renderFavorites();renderFollowList();renderRecent();renderPurchaseReset();if(currentDetailWork){refreshDetailRatings(currentDetailWork);refreshFavoriteInDetail(currentDetailWork);}
+   if(validateScoreDeductions(parsed.scoreSettings)){await dbPut(SCORE_SETTINGS_KEY,parsed.scoreSettings);scoreDeductions=parsed.scoreSettings;}
+   archivedReviews7=incoming7;savedReviews8=incoming8;favoriteStates=parsed.favorites;recalculateAllReviewScores();
+   refreshRecalculatedScores();if(currentDetailWork)refreshFavoriteInDetail(currentDetailWork);
    alert("復元しました。");
  }catch(err){alert("バックアップの復元に失敗しました: "+err.message);}finally{e.target.value="";}
 };
