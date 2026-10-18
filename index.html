@@ -551,6 +551,10 @@ body.detail-open .app{
 .detail-rating-value.score-tier-top,.detail-rating-value.score-tier-mid,.detail-rating-value.score-tier-low,.detail-rating-value.score-tier-neutral{
   display:inline-block;border-radius:9px;padding:5px 9px;line-height:1.2;
 }
+
+.follow-circle{border:1px solid var(--line,#d1d5db);border-radius:12px;margin:10px 0;overflow:hidden;background:var(--surface,#fff)}
+.follow-circle>summary{cursor:pointer;padding:14px 16px;font-weight:700;min-height:48px}
+.follow-circle .favorite-list{padding:0 8px 9px}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
@@ -561,11 +565,12 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.49 1問ずつレビュー</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.52 8問レビュー</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
-    <button id="tabFav" class="mode-btn" type="button">♡ お気に入り</button>
+    <button id="tabFav" class="mode-btn" type="button">お気に入り</button>
+    <button id="tabFollow" class="mode-btn" type="button">追っかけリスト</button>
   </div>
   <div id="perfBar" class="perfbar"><span>データ <b>読込中</b></span></div>
 </header>
@@ -589,7 +594,7 @@ body.detail-open .app{
   <div id="ratingsDiagnoseStatus" hidden class="test-note">評価診断：未実行（source別に数えるだけで、データは変更しません）</div>
   <div id="ratingsBackupListStatus" hidden class="test-note">バックアップ実体：未確認（OneDrive内を読むだけです）</div>
   <div id="ratingsMasterStatus" class="test-note">評価マスター：未作成（端末別バックアップは消しません）</div>
-  <div class="test-grid"><button id="newReviewBackup" type="button">新レビュー・お気に入りをバックアップ</button><label class="file-label">新レビューのバックアップを復元<input id="newReviewRestore" type="file" accept=".json,application/json" hidden></label></div>
+  <div class="test-grid"><button id="newReviewBackup" type="button">新レビュー・追っかけ・お気に入りをバックアップ</button><label class="file-label">新レビューのバックアップを復元<input id="newReviewRestore" type="file" accept=".json,application/json" hidden></label></div>
   <div id="testNote" class="test-note">CSVを一度読み込むと蔵書データを端末に保存します。自分評価はアプリ側で別保存します。</div>
 </details>
 
@@ -627,6 +632,12 @@ body.detail-open .app{
   <div class="section-head"><h2>♡ お気に入り</h2><span id="favoritesCount" class="hint"></span></div>
   <div class="fav-filter"><button id="onlyPractical" class="mode-btn" type="button">抜　実用的だった作品だけ</button></div>
   <div id="favoritesList" class="favorite-list"></div>
+</section>
+
+<section id="followSection" class="section hidden">
+  <div class="section-head"><h2>追っかけリスト</h2><span id="followCount" class="hint"></span></div>
+  <div class="test-note">第7問で「絶対に買う」または「セール次第」を選んだ作品を、サークルごとに表示します。</div>
+  <div id="followList" class="favorite-list"></div>
 </section>
 
 <section id="purchaseSection" class="section hidden">
@@ -673,7 +684,7 @@ body.detail-open .app{
   <div id="reviewWindow" class="review-window" role="dialog" aria-modal="true" aria-labelledby="reviewWindowTitle">
     <div class="review-window-head">
       <div>
-        <div id="reviewWindowTitle" class="review-window-title">8項目レビュー</div>
+        <div id="reviewWindowTitle" class="review-window-title">8問レビュー</div>
         <div id="reviewWorkTitle" class="review-work-title"></div>
       </div>
       <button id="reviewWindowClose" class="close" type="button" aria-label="レビューを閉じる">×</button>
@@ -724,14 +735,14 @@ const norm=s=>kataToHira(String(s||"").trim()).toLowerCase();
 
 let builtIn, works=[], authors=[], worksByAuthor=new Map(), authorsByKana=new Map();
 let purchaseShown=0, lastPerf="", appRatings={}, currentDetailWork=null, currentAuthorForWorks=null;
-let newReviews={}, favoriteStates={}, practicalOnly=false;
+let newReviews={}, archivedReviews7={}, savedReviews8={}, favoriteStates={}, practicalOnly=false;
 
 // v0.37: refresh後も「五十音 / 購入順」とスクロール位置をできるだけ維持する
 const VIEW_STATE_KEY="myLifeViewStateV1";
 let restoringViewState=false;
 let viewSaveTimer=null;
 function currentViewMode(){
-  return document.getElementById("tabFav")?.classList.contains("active") ? "favorites" : (document.getElementById("tabPurchase")?.classList.contains("active") ? "purchase" : "kana");
+  return document.getElementById("tabFollow")?.classList.contains("active") ? "follow" : (document.getElementById("tabFav")?.classList.contains("active") ? "favorites" : (document.getElementById("tabPurchase")?.classList.contains("active") ? "purchase" : "kana"));
 }
 function saveViewState(){
   if(restoringViewState)return;
@@ -754,20 +765,25 @@ function readViewState(){
 function setMainMode(mode){
   const tabKana=document.getElementById("tabKana"), tabPurchase=document.getElementById("tabPurchase");
   const kana=document.getElementById("kanaSection"), purchase=document.getElementById("purchaseSection");
-  const isPurchase=mode==="purchase", isFav=mode==="favorites";
-  tabKana.classList.toggle("active",!isPurchase&&!isFav);
+  const isPurchase=mode==="purchase", isFav=mode==="favorites", isFollow=mode==="follow";
+  tabKana.classList.toggle("active",!isPurchase&&!isFav&&!isFollow);
   tabPurchase.classList.toggle("active",isPurchase);
   document.getElementById("tabFav").classList.toggle("active",isFav);
-  kana.classList.toggle("hidden",isPurchase||isFav);
+  document.getElementById("tabFollow").classList.toggle("active",isFollow);
+  kana.classList.toggle("hidden",isPurchase||isFav||isFollow);
   purchase.classList.toggle("hidden",!isPurchase);
   document.getElementById("favoritesSection").classList.toggle("hidden",!isFav);
+  document.getElementById("followSection").classList.toggle("hidden",!isFollow);
+  if(isFollow)renderFollowList();
   if(isFav)renderFavorites();
 }
 function restoreViewState(){
   const st=readViewState();
   if(!st)return;
   restoringViewState=true;
-  if(st.mode==="favorites"){
+  if(st.mode==="follow"){
+    setMainMode("follow");
+  }else if(st.mode==="favorites"){
     setMainMode("favorites");
   }else if(st.mode==="purchase"){
     setMainMode("purchase");
@@ -792,7 +808,8 @@ const STORE="kv";
 const LIBRARY_KEY="libraryData";
 const APP_RATINGS_KEY="appRatingsV1";
 const LEGACY_QUICK_KEY="quickScores";
-const NEW_REVIEWS_KEY="newReviewsV3";
+const OLD_NEW_REVIEWS_KEY="newReviewsV3";
+const NEW_REVIEWS_KEY="newReviewsV4";
 const FAVORITES_KEY="favoriteWorksV1";
 
 const QUICK_SCORES_STAR_TOP=["5.00","4.90","4.70"];
@@ -1712,13 +1729,18 @@ const REVIEW_QUESTIONS=[
  {q:"ストーリーは面白かった？",help:"エロ漫画にストーリーは求めてないが、それでも稀に良作がある。",opts:[["すばらしい", 0], ["及第点（よくまとまってる）", 1], ["普通（内容がないよう）", 3], ["よくわからない（よくわからない）", 6]]},
  {q:"感情がうごいた？",help:"喜怒哀楽どんな感情であれ心が動いたら。",opts:[["大きく心が動いた", 0], ["ちょっとは心に残った", 2], ["普通。なにも残らない", 7]]},
  {q:"で？どんな気持ちになったの？",help:"元気になる感情もあれば、身体を動かすのもおっくうになる憂鬱な気持ちってあるよね。",opts:[["ハッピーな気持ちになった！", 0], ["これはこれで良い結末だったのかも…。", 0], ["ちょっと切なすぎない？", 2], ["胸糞すぎる", 5], ["むなしい。むなしい", 8]]},
+ {q:"続編が出たら読みたい？",help:"この作品の続きや、同じサークルの次回作を追いかけたいと思う？",opts:[["絶対に買う",0],["セール次第",0],["タイミング次第",1],["もう読まなくていい",2]]},
  {q:"名作だった？",help:"ずばり",opts:[["名作だった！", 0], ["惜しい", 1], ["良作", 2], ["普通", 5], ["価値なし", 12]]}
 ];
 async function loadNewLibraryStates(){
- const a=await dbGet(NEW_REVIEWS_KEY),b=await dbGet(FAVORITES_KEY);
- newReviews=(a&&typeof a==="object"&&!Array.isArray(a))?a:{};
- favoriteStates=(b&&typeof b==="object"&&!Array.isArray(b))?b:{};
+ const old=await dbGet(OLD_NEW_REVIEWS_KEY),current=await dbGet(NEW_REVIEWS_KEY),favorites=await dbGet(FAVORITES_KEY);
+ archivedReviews7=(old&&typeof old==="object"&&!Array.isArray(old))?old:{};
+ savedReviews8=(current&&typeof current==="object"&&!Array.isArray(current))?current:{};
+ // The 7-question results stay visible until each work is re-reviewed with Q7.
+ newReviews={...archivedReviews7,...savedReviews8};
+ favoriteStates=(favorites&&typeof favorites==="object"&&!Array.isArray(favorites))?favorites:{};
 }
+
 function reviewScore(answers){
  const tenths=50-answers.reduce((sum,v,i)=>sum+REVIEW_QUESTIONS[i].opts[v][1],0);
  // 3.5以下→1.0、3.6～3.9→3.0。実用性①「抜けた」は最低4.0。
@@ -1730,7 +1752,12 @@ let newReviewDraft=[];
 let newReviewSaving=false;
 function renderNewReview(w){
  const key=workKey(w),old=newReviews[key];
- newReviewDraft=Array.isArray(old?.answers)&&old.answers.length===REVIEW_QUESTIONS.length?old.answers.slice():Array(REVIEW_QUESTIONS.length).fill(null);
+ if(Array.isArray(old?.answers)&&old.answers.length===REVIEW_QUESTIONS.length){
+   newReviewDraft=old.answers.slice();
+ }else if(Array.isArray(old?.answers)&&old.answers.length===7){
+   // Preserve the original choices, but never invent an answer to the new Q7.
+   newReviewDraft=[...old.answers.slice(0,6),null,old.answers[6]];
+ }else newReviewDraft=Array(REVIEW_QUESTIONS.length).fill(null);
  newReviewStep=0;newReviewSaving=false;
  document.getElementById("newReviewBack").onclick=()=>{
    if(newReviewSaving||newReviewStep===0)return;
@@ -1770,19 +1797,22 @@ async function saveNewReview(w){
  newReviewSaving=true;
  document.getElementById("newReviewNotice").textContent="保存しています…";
  document.querySelectorAll("#newReviewQuestions button").forEach(b=>b.disabled=true);
- newReviews[key]={version:3,answers,score:reviewScore(answers),updated_at:new Date().toISOString()};
- try{await dbPut(NEW_REVIEWS_KEY,newReviews);}catch(err){
+ const record={version:4,answers,score:reviewScore(answers),updated_at:new Date().toISOString()};
+ newReviews[key]=record;
+ savedReviews8[key]=record;
+ try{await dbPut(NEW_REVIEWS_KEY,savedReviews8);}catch(err){
    if(previous===undefined)delete newReviews[key];else newReviews[key]=previous;
+   delete savedReviews8[key];
    newReviewSaving=false;renderNewReviewStep(w);
    document.getElementById("newReviewNotice").textContent="保存できませんでした。もう一度選択してください。";
    return;
  }
  newReviewSaving=false;
- refreshDetailRatings(w);refreshFavoriteInDetail(w);renderFavorites();renderPurchaseReset();renderRecent();
+ refreshDetailRatings(w);refreshFavoriteInDetail(w);renderFavorites();renderFollowList();renderPurchaseReset();renderRecent();
  const host=document.getElementById("newReviewQuestions");host.replaceChildren();
  const done=document.createElement("div");done.className="new-review-question";
  const heading=document.createElement("strong");heading.textContent="レビューを保存しました："+reviewScore(answers).toFixed(1)+"点";done.appendChild(heading);
- const desc=document.createElement("div");desc.className="new-review-help";desc.textContent="7問の回答を保存しました。旧評価は変更していません。";done.appendChild(desc);
+ const desc=document.createElement("div");desc.className="new-review-help";desc.textContent="8問の回答を保存しました。旧評価と以前の7問レビューは保持しています。";done.appendChild(desc);
  const again=document.createElement("button");again.type="button";again.className="new-review-choice";again.textContent="回答を見直す";again.onclick=()=>renderNewReview(w);done.appendChild(again);
  host.appendChild(done);
  document.getElementById("newReviewScore").textContent="完了";
@@ -1821,8 +1851,38 @@ function renderFavorites(){
  b.innerHTML=workRowHtml(w,`${w.author||w.circle||""}　${w.purchase_date||""}`);b.onclick=()=>openDetail(w);fragment.appendChild(b);}
  box.appendChild(fragment);
 }
+function renderFollowList(){
+ const host=document.getElementById("followList");if(!host)return;
+ host.replaceChildren();
+ const eligible=works.filter(w=>{
+   const record=newReviews[workKey(w)];
+   return Array.isArray(record?.answers)&&record.answers.length===8&&(record.answers[6]===0||record.answers[6]===1);
+ });
+ const groups=new Map();
+ for(const w of eligible){
+   const circle=String(w.circle||w.author||"サークル不明").trim();
+   const groupKey=circle.toLocaleLowerCase();
+   if(!groups.has(groupKey))groups.set(groupKey,{circle,works:[]});
+   groups.get(groupKey).works.push(w);
+ }
+ document.getElementById("followCount").textContent=`${groups.size}サークル / ${eligible.length}作品`;
+ if(!groups.size){const empty=document.createElement("div");empty.className="favorite-empty";empty.textContent="第7問で『絶対に買う』『セール次第』を選ぶと、ここに表示されます。";host.appendChild(empty);return;}
+ const sorted=[...groups.values()].sort((a,b)=>a.circle.localeCompare(b.circle,"ja"));
+ for(const group of sorted){
+   const details=document.createElement("details");details.className="follow-circle";
+   const summary=document.createElement("summary");summary.textContent=`${group.circle} （${group.works.length}作品）`;details.appendChild(summary);
+   const list=document.createElement("div");list.className="favorite-list";
+   group.works.sort((a,b)=>(b.purchase_date||"").localeCompare(a.purchase_date||""));
+   for(const w of group.works){
+     const row=document.createElement("button");row.type="button";row.className="work-row purchase-row";
+     const status=newReviews[workKey(w)].answers[6]===0?"絶対に買う":"セール次第";
+     row.innerHTML=workRowHtml(w,`${status}　${w.purchase_date||""}`);row.onclick=()=>openDetail(w);list.appendChild(row);
+   }
+   details.appendChild(list);host.appendChild(details);
+ }
+}
 document.getElementById("newReviewBackup").onclick=()=>{
- const payload={format:"my-life-review-favorites-v2",exported_at:new Date().toISOString(),reviews:newReviews,favorites:favoriteStates};
+ const payload={format:"my-life-review-favorites-v3",exported_at:new Date().toISOString(),reviews8:savedReviews8,reviews7:archivedReviews7,favorites:favoriteStates};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);
  const link=document.createElement("a");link.href=url;link.download=`MY_LIFE_reviews_backup_${new Date().toISOString().slice(0,10)}.json`;
  document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
@@ -1830,17 +1890,21 @@ document.getElementById("newReviewBackup").onclick=()=>{
 document.getElementById("newReviewRestore").onchange=async e=>{
  const file=e.target.files?.[0];if(!file)return;
  try{const parsed=JSON.parse(await file.text());
-   if(parsed.format!=="my-life-review-favorites-v2"||!parsed.reviews||!parsed.favorites)throw Error("形式が違います");
+   if(!parsed.favorites || !["my-life-review-favorites-v2","my-life-review-favorites-v3"].includes(parsed.format))throw Error("形式が違います");
+   const incoming8=parsed.format.endsWith("v3")?parsed.reviews8:{};
+   const incoming7=parsed.format.endsWith("v3")?parsed.reviews7:parsed.reviews;
+   if(!incoming8||!incoming7||typeof incoming8!=="object"||typeof incoming7!=="object")throw Error("レビューデータがありません");
    if(!confirm("現在の新レビューとお気に入りをバックアップの内容で置き換えます。続けますか？"))return;
-   await dbPut(NEW_REVIEWS_KEY,parsed.reviews);await dbPut(FAVORITES_KEY,parsed.favorites);
-   newReviews=parsed.reviews;favoriteStates=parsed.favorites;
-   renderFavorites();renderRecent();renderPurchaseReset();if(currentDetailWork){refreshDetailRatings(currentDetailWork);refreshFavoriteInDetail(currentDetailWork);}
+   await dbPut(OLD_NEW_REVIEWS_KEY,incoming7);await dbPut(NEW_REVIEWS_KEY,incoming8);await dbPut(FAVORITES_KEY,parsed.favorites);
+   archivedReviews7=incoming7;savedReviews8=incoming8;newReviews={...archivedReviews7,...savedReviews8};favoriteStates=parsed.favorites;
+   renderFavorites();renderFollowList();renderRecent();renderPurchaseReset();if(currentDetailWork){refreshDetailRatings(currentDetailWork);refreshFavoriteInDetail(currentDetailWork);}
    alert("復元しました。");
  }catch(err){alert("バックアップの復元に失敗しました: "+err.message);}finally{e.target.value="";}
 };
 
 const tabKana=document.getElementById("tabKana"),tabPurchase=document.getElementById("tabPurchase");
 document.getElementById("tabFav").onclick=()=>{setMainMode("favorites");queueSaveViewState();};
+document.getElementById("tabFollow").onclick=()=>{setMainMode("follow");queueSaveViewState();};
 document.getElementById("onlyPractical").onclick=()=>{practicalOnly=!practicalOnly;renderFavorites();};
 tabKana.onclick=()=>{setMainMode("kana");queueSaveViewState();};
 tabPurchase.onclick=()=>{setMainMode("purchase");queueSaveViewState();};
