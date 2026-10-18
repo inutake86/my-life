@@ -534,6 +534,23 @@ body.detail-open .app{
 #newReviewBack{min-height:44px;padding:10px 18px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:750}
 #newReviewBack:disabled{opacity:.4}
 #newReviewNotice{font-size:13px;color:var(--muted);line-height:1.5}
+
+/* v0.51: color-coded self-rating tiers; star belongs to the score, never the title. */
+.score-badge.score-tier-top,.recent-score.score-tier-top,.detail-rating-value.score-tier-top{
+  background:#fff0b8;color:#805100;border:2px solid #e6b23d;text-decoration:none;
+}
+.score-badge.score-tier-mid,.recent-score.score-tier-mid,.detail-rating-value.score-tier-mid{
+  background:#e5f2ff;color:#175ca4;border:2px solid #6da8e5;text-decoration:none;
+}
+.score-badge.score-tier-low,.recent-score.score-tier-low,.detail-rating-value.score-tier-low{
+  background:#f2e8e8;color:#884646;border:2px solid #ce9e9e;text-decoration:none;
+}
+.score-badge.score-tier-neutral,.recent-score.score-tier-neutral,.detail-rating-value.score-tier-neutral{
+  background:#edf0f4;color:#49576b;border:2px solid #b5c0cf;text-decoration:none;
+}
+.detail-rating-value.score-tier-top,.detail-rating-value.score-tier-mid,.detail-rating-value.score-tier-low,.detail-rating-value.score-tier-neutral{
+  display:inline-block;border-radius:9px;padding:5px 9px;line-height:1.2;
+}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
@@ -844,11 +861,24 @@ function formatSelfScore(value){
 
 function selfScoreDisplay(w){
   const newer=newReviews[workKey(w)];
-  if(newer && typeof newer.score==="number") return newer.score.toFixed(1);
-  const score=formatSelfScore(w?.score);
-  if(!score)return "";
-  const rec=ratingRecord(w);
-  return rec?.star===true ? `★${score}` : score;
+  if(newer && typeof newer.score==="number"){
+    // ★ is reserved for a new review whose first answer is "抜けた".
+    return `${newer?.answers?.[0]===0?"★":""}${newer.score.toFixed(1)}`;
+  }
+  return formatSelfScore(w?.score);
+}
+function selfScoreValue(w){
+  const newer=newReviews[workKey(w)];
+  if(newer && Number.isFinite(newer.score))return newer.score;
+  return numericSelfScore(w);
+}
+function scoreTierClass(w){
+  const n=selfScoreValue(w);
+  if(n===null)return "";
+  if(n>=4.5)return "score-tier-top";
+  if(n>=4.0)return "score-tier-mid";
+  if(n<=3.0)return "score-tier-low";
+  return "score-tier-neutral";
 }
 
 function reviewHeartsHtml(w){
@@ -864,18 +894,13 @@ function numericSelfScore(w){
 function isReadWork(w){ return numericSelfScore(w)!==null; }
 function workRowHtml(w,meta){
   const read=isReadWork(w);
-  const rec=ratingRecord(w);
-  const starred=read && rec?.star===true && !newReviews[workKey(w)];
-  const n=numericSelfScore(w);
   const score=selfScoreDisplay(w)||"";
-  const display=starred ? `★${score}` : score;
-  const currentNum=newReviews[workKey(w)]?.score??n;
-  const cls=(starred ? "score-badge starred" : (currentNum!==null && currentNum>=4.7 ? "score-badge high" : "score-badge")) + (currentNum!==null && currentNum<=3.0 ? " no-value" : "");
+  const cls=`score-badge ${scoreTierClass(w)}`;
   const heartSvg=`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s-7.2-4.35-9.55-8.55C.7 9.3 2.15 5.5 5.9 4.45 8.1 3.83 10.2 4.6 12 6.45c1.8-1.85 3.9-2.62 6.1-2 3.75 1.05 5.2 4.85 3.45 8C19.2 16.65 12 21 12 21Z"/></svg>`;
   const reviewHearts=`${read?`<span class="review-heart legacy-heart" title="旧レビュー登録済み">${heartSvg}</span>`:""}${newReviews[workKey(w)]?`<span class="review-heart current-heart" title="新レビュー登録済み">${heartSvg}</span>`:""}`;
   return `<div class="review-hearts" aria-label="レビュー登録状況">${reviewHearts}</div>`+
-    `<div class="work-title">${newReviews[workKey(w)]?.answers?.[0]===0?'<span class="practical-mark">抜</span>':''}${escapeHtml(w.title)}</div>`+
-    `<div class="work-meta-line"><div class="work-meta">${escapeHtml(meta||"")}</div>${(read||newReviews[workKey(w)])?`<span class="${cls}">${escapeHtml(display)}</span>`:""}</div>`;
+    `<div class="work-title">${escapeHtml(w.title)}</div>`+
+    `<div class="work-meta-line"><div class="work-meta">${escapeHtml(meta||"")}</div>${(read||newReviews[workKey(w)])?`<span class="${cls}">${escapeHtml(score)}</span>`:""}</div>`;
 }
 
 function excelSelfScoreOf(w){
@@ -1290,7 +1315,7 @@ function renderRecent(){
     }
     if(w.score||newReviews[workKey(w)]){
       const sc=document.createElement("span");
-      sc.className="recent-score score";
+      sc.className=`recent-score score ${scoreTierClass(w)}`;
       sc.textContent=selfScoreDisplay(w);
       b.appendChild(sc);
     }
@@ -1351,7 +1376,7 @@ function openDetail(w){
   const selfScore=selfScoreDisplay(w)||"未読";
   document.getElementById("detailRatings").innerHTML=
     `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
-    `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`+reviewHeartsHtml(w);
+    `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value ${scoreTierClass(w)}">${escapeHtml(selfScore)}</span></div>`+reviewHeartsHtml(w);
 
   const productBtn=document.getElementById("productBtn");
   if(productUrl && productUrl!=="#"){
@@ -1638,6 +1663,8 @@ function updateScoreDisplays(key,score){
   const shown=target?selfScoreDisplay(target):formatSelfScore(score);
   document.querySelectorAll(`[data-work-id="${CSS.escape(key)}"] .score`).forEach(el=>{
     el.textContent=shown||"";
+    el.classList.remove("score-tier-top","score-tier-mid","score-tier-low","score-tier-neutral");
+    if(target){const tier=scoreTierClass(target);if(tier)el.classList.add(tier);}
   });
   renderRecent();
   renderFavorites();
@@ -1649,7 +1676,7 @@ function refreshDetailRatings(w){
     const selfScore=selfScoreDisplay(w)||"未読";
     document.getElementById("detailRatings").innerHTML=
       `<div class="detail-rating-card"><span class="detail-rating-label">読者評価</span><span class="detail-rating-value">${escapeHtml(readerScore)}</span></div>`+
-      `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value">${escapeHtml(selfScore)}</span></div>`+reviewHeartsHtml(w);
+      `<div class="detail-rating-card"><span class="detail-rating-label">自分評価</span><span class="detail-rating-value ${scoreTierClass(w)}">${escapeHtml(selfScore)}</span></div>`+reviewHeartsHtml(w);
   }
 }
 document.getElementById("reviewWindowClose").onclick=closeReviewWindow;
