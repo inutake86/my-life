@@ -513,6 +513,19 @@ body.detail-open .app{
 #newReviewSave{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:11px 15px;font-weight:800}
 #newReviewSave:disabled{opacity:.48}#newReviewNotice{font-size:12px;color:var(--muted)}
 .legacy-rating-panel{border-top:1px solid var(--line);padding:12px 1px}.legacy-rating-panel summary{cursor:pointer;font-size:13px;color:var(--muted);font-weight:700}
+/* v0.49: one-question-at-a-time, large tap targets */
+.new-review-wrap{padding:14px 3px 18px}
+.new-review-intro{margin-bottom:13px;font-size:15px}
+.new-review-question{border:1px solid var(--line);border-radius:16px;padding:17px 14px;margin:0;background:#fff}
+.new-review-question strong{display:block;font-size:clamp(18px,3vw,23px);line-height:1.5}
+.new-review-help{font-size:14px;line-height:1.7;margin:11px 0 17px;color:var(--muted)}
+.new-review-choice{display:flex;align-items:center;justify-content:center;width:100%;min-height:62px;padding:15px 13px;margin:11px 0;border:2px solid var(--line);border-radius:13px;background:#fff;color:var(--text);font-size:16px;font-weight:750;line-height:1.45;text-align:center;cursor:pointer;touch-action:manipulation}
+.new-review-choice:active{background:#e8f0fc;border-color:var(--accent);transform:scale(.995)}
+.new-review-choice:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.new-review-actions{display:flex;align-items:center;gap:12px;margin-top:12px}
+#newReviewBack{min-height:44px;padding:10px 18px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:750}
+#newReviewBack:disabled{opacity:.4}
+#newReviewNotice{font-size:13px;color:var(--muted);line-height:1.5}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
@@ -523,7 +536,7 @@ body.detail-open .app{
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.48 お気に入り・8問レビュー</span></div>
+  <div class="title-row"><h1>MY LIFE 蔵書録</h1><span class="badge">PWA v0.49 1問ずつレビュー</span></div>
   <div class="mode-tabs">
     <button id="tabKana" class="mode-btn active">五十音で探す</button>
     <button id="tabPurchase" class="mode-btn">購入順</button>
@@ -642,9 +655,9 @@ body.detail-open .app{
     </div>
 
     <div class="new-review-wrap">
-      <div class="new-review-intro"><strong>新レビュー（8問）</strong><span id="newReviewScore"></span></div>
+      <div class="new-review-intro"><strong>新レビュー</strong><span id="newReviewScore" aria-live="polite"></span></div>
       <div id="newReviewQuestions"></div>
-      <div class="new-review-actions"><button id="newReviewSave" type="button">8問を回答して保存</button><span id="newReviewNotice"></span></div>
+      <div class="new-review-actions"><button id="newReviewBack" type="button">← 前の質問</button><span id="newReviewNotice" role="status" aria-live="polite"></span></div>
     </div>
     <details class="legacy-rating-panel"><summary>旧評価（暫定保存・変更可能）</summary>
     <div class="quick-rating">
@@ -1667,45 +1680,69 @@ async function loadNewLibraryStates(){
  favoriteStates=(b&&typeof b==="object"&&!Array.isArray(b))?b:{};
 }
 function reviewScore(answers){return (50-answers.reduce((sum,v,i)=>sum+REVIEW_QUESTIONS[i].opts[v][1],0))/10;}
+let newReviewStep=0;
+let newReviewDraft=[];
+let newReviewSaving=false;
 function renderNewReview(w){
- const key=workKey(w), old=newReviews[key], answers=Array.isArray(old?.answers)?old.answers:[];
+ const key=workKey(w),old=newReviews[key];
+ newReviewDraft=Array.isArray(old?.answers)&&old.answers.length===REVIEW_QUESTIONS.length?old.answers.slice():Array(REVIEW_QUESTIONS.length).fill(null);
+ newReviewStep=0;newReviewSaving=false;
+ document.getElementById("newReviewBack").onclick=()=>{
+   if(newReviewSaving||newReviewStep===0)return;
+   newReviewStep--;renderNewReviewStep(w);
+ };
+ renderNewReviewStep(w);
+}
+function renderNewReviewStep(w){
  const host=document.getElementById("newReviewQuestions");host.replaceChildren();
- REVIEW_QUESTIONS.forEach((def,i)=>{
-   const field=document.createElement("div");field.className="new-review-question";
-   const title=document.createElement("strong");title.textContent=def.q;field.appendChild(title);
-   const help=document.createElement("div");help.className="new-review-help";help.textContent=def.help;field.appendChild(help);
-   def.opts.forEach(([name,penalty],j)=>{
-     const lab=document.createElement("label");lab.className="new-review-choice";
-     const radio=document.createElement("input");radio.type="radio";radio.name=`newq_${i}`;radio.value=j;radio.checked=answers[i]===j;
-     radio.onchange=updateNewReviewPreview;lab.appendChild(radio);
-     lab.appendChild(document.createTextNode(name));
-     if(penalty){const d=document.createElement("span");d.className="new-review-deduct";d.textContent=`−${(penalty/10).toFixed(1)}`;lab.appendChild(d);}
-     field.appendChild(lab);
-   });host.appendChild(field);
+ const i=newReviewStep,def=REVIEW_QUESTIONS[i];
+ document.getElementById("newReviewScore").textContent=`${i+1} / ${REVIEW_QUESTIONS.length} 問`;
+ document.getElementById("newReviewBack").disabled=i===0||newReviewSaving;
+ const field=document.createElement("div");field.className="new-review-question";
+ const title=document.createElement("strong");title.textContent=def.q;field.appendChild(title);
+ const help=document.createElement("div");help.className="new-review-help";help.textContent=def.help;field.appendChild(help);
+ def.opts.forEach(([name],j)=>{
+   const button=document.createElement("button");button.type="button";button.className="new-review-choice";
+   button.textContent=name;
+   if(newReviewDraft[i]===j){button.style.borderColor="var(--accent)";button.setAttribute("aria-pressed","true");}
+   button.disabled=newReviewSaving;
+   button.onclick=async()=>{
+     if(newReviewSaving)return;
+     newReviewDraft[i]=j;
+     if(i<REVIEW_QUESTIONS.length-1){newReviewStep=i+1;renderNewReviewStep(w);}
+     else await saveNewReview(w);
+   };
+   field.appendChild(button);
  });
- document.getElementById("newReviewNotice").textContent=old?"保存済み。回答を変更すると再保存できます。":"未評価です。8問すべて回答してください。";
- document.getElementById("newReviewSave").onclick=()=>saveNewReview(w);
- updateNewReviewPreview();
-}
-function selectedReviewAnswers(){
- return REVIEW_QUESTIONS.map((_,i)=>{const e=document.querySelector(`input[name="newq_${i}"]:checked`);return e?Number(e.value):null;});
-}
-function updateNewReviewPreview(){
- const answers=selectedReviewAnswers(),complete=answers.every(a=>a!==null);
- document.getElementById("newReviewScore").textContent=complete?`${reviewScore(answers).toFixed(1)} / 5.0`:`${answers.filter(a=>a!==null).length} / 8問`;
- document.getElementById("newReviewSave").disabled=!complete;
+ host.appendChild(field);
+ const notice=document.getElementById("newReviewNotice");
+ notice.textContent=i===REVIEW_QUESTIONS.length-1?"この回答でレビューを保存します":"答えを選ぶと次の質問へ進みます";
 }
 async function saveNewReview(w){
- const answers=selectedReviewAnswers();if(answers.some(a=>a===null))return;
+ if(newReviewSaving||newReviewDraft.some((v,i)=>!Number.isInteger(v)||v<0||v>=REVIEW_QUESTIONS[i].opts.length))return;
  const key=workKey(w);if(!key)return;
- const previous=newReviews[key];
+ const previous=newReviews[key],answers=newReviewDraft.slice();
+ newReviewSaving=true;
+ document.getElementById("newReviewNotice").textContent="保存しています…";
+ document.querySelectorAll("#newReviewQuestions button").forEach(b=>b.disabled=true);
  newReviews[key]={version:2,answers,score:reviewScore(answers),updated_at:new Date().toISOString()};
  try{await dbPut(NEW_REVIEWS_KEY,newReviews);}catch(err){
    if(previous===undefined)delete newReviews[key];else newReviews[key]=previous;
-   alert("新レビューを保存できませんでした。保存領域を確認してください。");return;
+   newReviewSaving=false;renderNewReviewStep(w);
+   document.getElementById("newReviewNotice").textContent="保存できませんでした。もう一度選択してください。";
+   return;
  }
- document.getElementById("newReviewNotice").textContent="保存しました（旧評価は変更していません）";
+ newReviewSaving=false;
  refreshDetailRatings(w);refreshFavoriteInDetail(w);renderFavorites();renderPurchaseReset();renderRecent();
+ const host=document.getElementById("newReviewQuestions");host.replaceChildren();
+ const done=document.createElement("div");done.className="new-review-question";
+ const heading=document.createElement("strong");heading.textContent="レビューを保存しました";done.appendChild(heading);
+ const desc=document.createElement("div");desc.className="new-review-help";desc.textContent="8問の回答を保存しました。旧評価は変更していません。";done.appendChild(desc);
+ const again=document.createElement("button");again.type="button";again.className="new-review-choice";again.textContent="回答を見直す";again.onclick=()=>renderNewReview(w);done.appendChild(again);
+ host.appendChild(done);
+ document.getElementById("newReviewScore").textContent="完了";
+ document.getElementById("newReviewBack").disabled=true;
+ document.getElementById("newReviewNotice").textContent="";
 }
 function refreshFavoriteInDetail(w){
  const key=workKey(w),button=document.getElementById("favoriteToggle"),fav=favoriteStates[key]===true;
